@@ -26,6 +26,7 @@ module.exports = defineConfig({
     { resolve: '@mercurjs/wishlist' },
     { resolve: '@mercurjs/split-order-payment' },
     { resolve: '@mercurjs/attribute' },
+    { resolve: '@mercurjs/city' },
     {
       resolve: '@mercurjs/taxcode',
       options: {
@@ -47,6 +48,7 @@ module.exports = defineConfig({
         appId: process.env.ALGOLIA_APP_ID
       }
     },
+
     {
       resolve: '@medusajs/medusa/payment',
       options: {
@@ -79,6 +81,24 @@ module.exports = defineConfig({
             id: 'local',
             options: {
               channels: ['feed', 'seller_feed']
+            }
+          }
+        ]
+      }
+    },
+    {
+      resolve: '@medusajs/medusa/fulfillment',
+      options: {
+        providers: [
+          {
+            resolve: '@medusajs/medusa/fulfillment-manual',
+            id: 'manual'
+          },
+          {
+            resolve: './src/modules/postex',
+            id: 'postex',
+            options: {
+              apiKey: process.env.POSTEX_API_KEY
             }
           }
         ]

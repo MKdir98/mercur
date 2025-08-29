@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../../../b2c-marketplace-storefront"
+		},
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../vendor-panel"
+		}
+	],
+	"settings": {}
+}

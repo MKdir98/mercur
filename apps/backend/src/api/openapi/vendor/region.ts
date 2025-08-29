@@ -26,6 +26,14 @@
  *   type:
  *     type: string
  *     description: The type of the promotion.
+ *   city_id:
+ *     type: string
+ *     description: The unique identifier of the city this region belongs to.
+ *     nullable: true
+ *   city:
+ *     $ref: "#/components/schemas/VendorCity"
+ *     description: The city this region belongs to.
+ *     nullable: true
  *   countries:
  *     type: array
  *     items:

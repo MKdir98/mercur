@@ -26,6 +26,10 @@ export const filterSellerShippingOptionsStep = createStep(
       }
     })
 
+    if (!cart.items || cart.items.length === 0) {
+      return new StepResponse([])
+    }
+
     const { data: sellersInCart } = await query.graph({
       entity: sellerProduct.entryPoint,
       fields: ['seller_id'],
@@ -75,6 +79,7 @@ export const filterSellerShippingOptionsStep = createStep(
           seller_id: relation.seller.id
         }
       })
+
     return new StepResponse(optionsAvailable)
   }
 )

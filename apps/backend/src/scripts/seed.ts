@@ -15,7 +15,8 @@ import {
   createSellerShippingOption,
   createSellerStockLocation,
   createServiceZoneForFulfillmentSet,
-  createStore
+  createStore,
+  createIranStatesAndCities
 } from './seed/seed-functions'
 
 export default async function seedMarketplaceData({ container }: ExecArgs) {
@@ -30,6 +31,10 @@ export default async function seedMarketplaceData({ container }: ExecArgs) {
   const apiKey = await createPublishableKey(container, salesChannel.id)
   logger.info('Creating store data...')
   await createStore(container, salesChannel.id, region.id)
+
+  logger.info('Seeding Iran states & cities...')
+  await createIranStatesAndCities(container)
+
   logger.info('Creating configuration rules...')
   await createConfigurationRules(container)
 

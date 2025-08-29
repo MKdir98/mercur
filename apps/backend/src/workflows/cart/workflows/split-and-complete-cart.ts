@@ -94,7 +94,7 @@ export const splitAndCompleteCartWorkflow = createWorkflow(
         })
       )
 
-      const { sellerProducts, sellerShippingOptions } =
+     const { sellerProducts, sellerShippingOptions } =
         validateCartShippingOptionsStep(validateCartShippingOptionsInput)
 
       const paymentSessions = validateCartPaymentsStep({ cart })

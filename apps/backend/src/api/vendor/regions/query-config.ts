@@ -7,7 +7,9 @@ export const defaultVendorRegionFields = [
   'deleted_at',
   'automatic_taxes',
   'metadata',
-  '*countries'
+  '*countries',
+  'city_id',
+  '*city'
 ]
 
 export const vendorRegionsQueryConfig = {

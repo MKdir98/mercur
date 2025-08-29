@@ -15,6 +15,7 @@
   "scripts": {
     "build": "medusa build && ln -s .medusa/server/public/ public",
     "seed": "medusa exec ./src/scripts/seed.ts",
+    "seed:cities": "medusa exec ./src/scripts/seed-cities.ts",
     "start": "medusa start --types=false",
     "dev": "medusa develop --types=false",
     "db:migrate": "medusa db:migrate",

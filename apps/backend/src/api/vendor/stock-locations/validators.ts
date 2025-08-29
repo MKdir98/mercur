@@ -55,6 +55,14 @@ export const VendorGetStockLocationParams = createFindParams({
  *     type: string
  *     nullable: true
  *     description: Province
+ *   latitude:
+ *     type: number
+ *     nullable: true
+ *     description: Latitude coordinate for geolocation
+ *   longitude:
+ *     type: number
+ *     nullable: true
+ *     description: Longitude coordinate for geolocation
  */
 export const UpsertStockLocationAddress = z.object({
   address_1: z.string(),
@@ -64,7 +72,9 @@ export const UpsertStockLocationAddress = z.object({
   country_code: z.string(),
   phone: z.string().nullish(),
   postal_code: z.string().nullish(),
-  province: z.string().nullish()
+  province: z.string().nullish(),
+  latitude: z.number().nullable().optional(),
+  longitude: z.number().nullable().optional()
 })
 
 export type VendorCreateStockLocationType = z.infer<
