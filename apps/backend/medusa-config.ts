@@ -15,6 +15,13 @@ module.exports = defineConfig({
       cookieSecret: process.env.COOKIE_SECRET || 'supersecret'
     }
   },
+  admin: {
+     vite: () => ({
+      server: {
+        allowedHosts: true,
+      },
+    }),
+  },
   modules: [
     { resolve: '@mercurjs/seller' },
     { resolve: '@mercurjs/reviews' },
