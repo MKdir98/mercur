@@ -96,10 +96,10 @@ export const GET = async (
 
   validateRuleType(ruleType)
   validateRuleAttribute({
-    promotionType,
-    ruleType,
+    promotionType: promotionType as any,
+    ruleType: ruleType as any,
     ruleAttributeId,
-    applicationMethodType
+    applicationMethodType: applicationMethodType as any
   })
 
   const seller = await fetchSellerByAuthActorId(

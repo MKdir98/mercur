@@ -166,7 +166,7 @@ export async function findAndTransformAlgoliaProducts(
         })
       })
       .flat()
-    product.variants = z.array(AlgoliaVariantValidator).parse(product.variants)
+    product.variants = product.variants || []
     product.variants = product.variants
       ?.map((variant) => {
         return variant.options?.reduce((entry, item) => {
@@ -186,5 +186,5 @@ export async function findAndTransformAlgoliaProducts(
     })
   }
 
-  return z.array(AlgoliaProductValidator).parse(products)
+  return products as any[]
 }

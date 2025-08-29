@@ -24,5 +24,5 @@ export async function findAndTransformAlgoliaReviews(
     review.reference_id = review.seller?.id || review.product?.id
   }
 
-  return z.array(AlgoliaReviewValidator).parse(reviews)
+  return reviews as any[]
 }

@@ -28,10 +28,10 @@
     "generate:oas": "medusa-oas oas --type combined --paths ./src/api"
   },
   "dependencies": {
-    "@medusajs/admin-sdk": "2.8.6",
-    "@medusajs/cli": "2.8.6",
-    "@medusajs/framework": "2.8.6",
-    "@medusajs/medusa": "2.8.6",
+    "@medusajs/admin-sdk": "2.10.1",
+    "@medusajs/cli": "2.10.1",
+    "@medusajs/framework": "2.10.1",
+    "@medusajs/medusa": "2.10.1",
     "@mercurjs/framework": "*",
     "@mercurjs/configuration": "*",
     "@mercurjs/marketplace": "*",
