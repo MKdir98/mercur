@@ -5,9 +5,13 @@ import {
 import {
   WorkflowResponse,
   createHook,
+  createStep,
   createWorkflow,
+  StepResponse,
   transform
 } from '@medusajs/workflows-sdk'
+import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
+import slugify from 'slugify'
 
 import {
   CreateRequestDTO,
@@ -21,6 +25,17 @@ import { SELLER_MODULE } from '@mercurjs/seller'
 import { emitMultipleEventsStep } from '../../common/steps'
 import { createRequestStep } from '../steps'
 
+function generateUrlSafeHandle(title: string): string {
+  const slug = slugify(title, {
+    lower: true,           
+    strict: true,          
+    locale: 'en',          
+    trim: true             
+  })
+  
+  return slug || `product-${Date.now()}`
+}
+
 export const createProductRequestWorkflow = createWorkflow(
   'create-product-request',
   function (input: {
@@ -28,11 +43,19 @@ export const createProductRequestWorkflow = createWorkflow(
     seller_id: string
     additional_data?: any
   }) {
-    const productPayload = transform(input, (input) => ({
-      ...input.data.data,
-      status: input.data.data.status === 'draft' ? 'draft' : 'proposed'
-    }))
-
+    const productPayload = transform(input, (input) => {
+      const payload = {
+        ...input.data.data,
+        status: input.data.data.status === 'draft' ? 'draft' : 'proposed'
+      }
+      
+      if (!payload.handle && payload.title) {
+        payload.handle = generateUrlSafeHandle(payload.title)
+      }
+      
+      return payload
+    })
+    
     const product = createProductsWorkflow.runAsStep({
       input: {
         products: [productPayload],
