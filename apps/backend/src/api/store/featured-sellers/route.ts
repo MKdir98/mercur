@@ -1,7 +1,6 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 import { z } from 'zod'
-import { storeCors } from '../cors'
 
 const FeaturedSellersQuerySchema = z.object({
   limit: z.coerce.number().optional().default(8),
@@ -15,7 +14,6 @@ export const GET = async (
   res: MedusaResponse
 ) => {
   // Apply CORS
-  storeCors(req, res, () => {})
 
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
   
@@ -75,6 +73,5 @@ export const GET = async (
 }
 
 export const OPTIONS = async (req: MedusaRequest, res: MedusaResponse) => {
-  storeCors(req, res, () => {})
   res.status(204).send()
 }
