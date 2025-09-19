@@ -47,7 +47,10 @@ export const AdminUpdateSeller = z
     address_line: z.string().optional(),
     city: z.string().optional(),
     state: z.string().optional(),
-    postal_code: z.string().optional(),
+    postal_code: z.string().optional().refine(
+      (val) => !val || /^\d{10}$/.test(val),
+      "کد پستی باید دقیقاً ۱۰ رقم باشد"
+    ),
     country_code: z.string().optional(),
     tax_id: z.string().optional(),
     store_status: z.nativeEnum(StoreStatus).optional()

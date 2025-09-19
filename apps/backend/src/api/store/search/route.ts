@@ -1,4 +1,5 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
+import { ContainerRegistrationKeys, Modules } from '@medusajs/framework/utils'
 import { z } from 'zod'
 
 // Type for Elasticsearch service (will be replaced with proper import when module is set up)
@@ -153,7 +154,8 @@ export const GET = async (
         'created_at',
         'updated_at',
         'variants.id',
-        'variants.title'
+        'variants.title',
+        'variants.prices.*'
       ],
       filters,
       pagination: {
@@ -162,9 +164,74 @@ export const GET = async (
       }
     })
     
+    // Calculate prices with promotions for search results
+    const pricingService = req.scope.resolve(Modules.PRICING)
+    
+    const productsWithCalculatedPrices = await Promise.all((products || []).map(async (product: any) => {
+      if (!product.variants?.length) return product
+      
+      const variantsWithPrices = await Promise.all(
+        product.variants.map(async (variant: any) => {
+          const basePrice = variant.prices?.[0]
+          if (!basePrice) {
+            return { ...variant, calculated_price: null }
+          }
+
+          try {
+            const calculatedPrices = await pricingService.calculatePrices(
+              { id: [basePrice.price_set_id] },
+                             {
+                 context: {
+                   currency_code: basePrice.currency_code || 'IRR'
+                   // region_id and country_code not available in search params
+                 }
+               }
+            )
+
+            const calculatedPrice = calculatedPrices?.[0]
+            
+            return {
+              ...variant,
+              calculated_price: calculatedPrice ? {
+                calculated_amount: calculatedPrice.calculated_amount,
+                calculated_amount_with_tax: calculatedPrice.calculated_amount,
+                original_amount: basePrice.amount,
+                original_amount_with_tax: basePrice.amount,
+                                 currency_code: basePrice.currency_code || 'IRR'
+                 // price_list_type not available in CalculatedPriceSet
+              } : {
+                calculated_amount: basePrice.amount,
+                calculated_amount_with_tax: basePrice.amount,
+                original_amount: basePrice.amount,
+                original_amount_with_tax: basePrice.amount,
+                currency_code: basePrice.currency_code || 'IRR'
+              }
+            }
+          } catch (error) {
+            console.error('Error calculating price for variant:', variant.id, error)
+            return {
+              ...variant,
+              calculated_price: {
+                calculated_amount: basePrice.amount,
+                calculated_amount_with_tax: basePrice.amount,
+                original_amount: basePrice.amount,
+                original_amount_with_tax: basePrice.amount,
+                currency_code: basePrice.currency_code || 'IRR'
+              }
+            }
+          }
+        })
+      )
+
+      return {
+        ...product,
+        variants: variantsWithPrices
+      }
+    }))
+    
     // Simulate search response format
     const searchResults = {
-      products: products || [],
+      products: productsWithCalculatedPrices,
       facets: {
         categories: [],
         colors: [],

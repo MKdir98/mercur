@@ -33,7 +33,7 @@ export const recalculateOnboardingStep = createStep(
         photo: z.string().nullish(),
         address_line: z.string().min(1),
         city: z.string().min(1),
-        postal_code: z.string().min(1),
+        postal_code: z.string().min(1).regex(/^\d{10}$/, "کد پستی باید دقیقاً ۱۰ رقم باشد"),
         country_code: z.string().min(1),
         tax_id: z.string().nullish()
       })

@@ -95,7 +95,10 @@ export const VendorCreateSeller = z
     address_line: z.string().nullish().optional(),
     city: z.string().nullish().optional(),
     state: z.string().nullish().optional(),
-    postal_code: z.string().nullish().optional(),
+          postal_code: z.string().nullish().optional().refine(
+        (val) => !val || /^\d{10}$/.test(val),
+        "کد پستی باید دقیقاً ۱۰ رقم باشد"
+      ),
     country_code: z.string().nullish().optional(),
     tax_id: z.string().nullish().optional(),
     member: z.object({
@@ -171,7 +174,10 @@ export const VendorUpdateSeller = z
     address_line: z.string().optional(),
     city: z.string().optional(),
     state: z.string().optional(),
-    postal_code: z.string().optional(),
+    postal_code: z.string().optional().refine(
+      (val) => !val || /^\d{10}$/.test(val),
+      "کد پستی باید دقیقاً ۱۰ رقم باشد"
+    ),
     country_code: z.string().optional(),
     tax_id: z.string().optional()
   })

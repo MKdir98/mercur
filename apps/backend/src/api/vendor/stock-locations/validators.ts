@@ -71,7 +71,10 @@ export const UpsertStockLocationAddress = z.object({
   city: z.string().nullish(),
   country_code: z.string(),
   phone: z.string().nullish(),
-  postal_code: z.string().nullish(),
+      postal_code: z.string().nullish().refine(
+      (val) => !val || /^\d{10}$/.test(val),
+      "کد پستی باید دقیقاً ۱۰ رقم باشد"
+    ),
   province: z.string().nullish(),
   latitude: z.number().nullable().optional(),
   longitude: z.number().nullable().optional()
