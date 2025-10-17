@@ -7,3 +7,6 @@ export * from './apply-request-type-filter'
 export * from './check-customer-ownership'
 export * from './check-seller-approved'
 export * from './store-active-guard'
+// Temporarily disabled - TODO: Fix TypeScript errors
+// export * from './authenticate-api-client'
+// export * from './check-seller-access'

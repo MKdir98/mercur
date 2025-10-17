@@ -53,6 +53,7 @@ export interface SearchParams {
   query?: string
   filters?: string
   category_id?: string
+  category?: string
   collection_id?: string
   seller_handle?: string
   locale?: string
@@ -60,6 +61,9 @@ export interface SearchParams {
   limit: number
   min_price?: number
   max_price?: number
+  color?: string
+  size?: string
+  condition?: string
   sort_by?: string
   facets?: string
 }
@@ -172,6 +176,7 @@ export class ElasticsearchModuleService {
       const {
         query = '',
         category_id,
+        category,
         collection_id,
         seller_handle,
         locale,
@@ -179,6 +184,9 @@ export class ElasticsearchModuleService {
         limit,
         min_price,
         max_price,
+        color,
+        size,
+        condition,
         sort_by
       } = params
 
@@ -218,21 +226,101 @@ export class ElasticsearchModuleService {
       // Filters
       esQuery.bool.filter.push({ term: { status: 'published' } })
       esQuery.bool.must_not.push({ term: { 'seller.store_status': 'SUSPENDED' } })
+      
+      // Filter for products with available inventory
+      esQuery.bool.filter.push({
+        nested: {
+          path: 'variants',
+          query: {
+            range: { 'variants.inventory_quantity': { gt: 0 } }
+          }
+        }
+      })
 
       if (locale) {
         esQuery.bool.filter.push({ term: { supported_countries: locale } })
       }
 
       if (category_id) {
-        esQuery.bool.filter.push({ term: { 'categories.id': category_id } })
+        esQuery.bool.filter.push({ 
+          nested: { 
+            path: 'categories', 
+            query: { term: { 'categories.id': category_id } } 
+          } 
+        })
+      }
+
+      // Filter by category name (for faceted filtering)
+      if (category) {
+        const categories = category.split(',').filter(Boolean)
+        if (categories.length > 0) {
+          esQuery.bool.filter.push({
+            nested: {
+              path: 'categories',
+              query: {
+                terms: { 'categories.name.keyword': categories }
+              }
+            }
+          })
+        }
       }
 
       if (collection_id) {
-        esQuery.bool.filter.push({ term: { 'collections.id': collection_id } })
+        esQuery.bool.filter.push({ 
+          nested: { 
+            path: 'collections', 
+            query: { term: { 'collections.id': collection_id } } 
+          } 
+        })
       }
 
       if (seller_handle) {
         esQuery.bool.filter.push({ term: { 'seller.handle': seller_handle } })
+      }
+
+      // Color filter
+      if (color) {
+        const colors = color.split(',').filter(Boolean)
+        if (colors.length > 0) {
+          esQuery.bool.filter.push({
+            nested: {
+              path: 'variants',
+              query: {
+                terms: { 'variants.color.keyword': colors }
+              }
+            }
+          })
+        }
+      }
+
+      // Size filter
+      if (size) {
+        const sizes = size.split(',').filter(Boolean)
+        if (sizes.length > 0) {
+          esQuery.bool.filter.push({
+            nested: {
+              path: 'variants',
+              query: {
+                terms: { 'variants.size.keyword': sizes }
+              }
+            }
+          })
+        }
+      }
+
+      // Condition filter
+      if (condition) {
+        const conditions = condition.split(',').filter(Boolean)
+        if (conditions.length > 0) {
+          esQuery.bool.filter.push({
+            nested: {
+              path: 'variants',
+              query: {
+                terms: { 'variants.condition.keyword': conditions }
+              }
+            }
+          })
+        }
       }
 
       // Price range filter
@@ -269,7 +357,10 @@ export class ElasticsearchModuleService {
       // Build aggregations (facets)
       const aggregations = {
         categories: {
-          terms: { field: 'categories.name.keyword', size: 20 }
+          nested: { path: 'categories' },
+          aggs: {
+            categories: { terms: { field: 'categories.name.keyword', size: 20 } }
+          }
         },
         colors: {
           nested: { path: 'variants' },
@@ -338,8 +429,8 @@ export class ElasticsearchModuleService {
   private processFacets(aggregations: any) {
     const facets: Record<string, any> = {}
 
-    if (aggregations.categories) {
-      facets.categories = aggregations.categories.buckets.map((bucket: any) => ({
+    if (aggregations.categories?.categories) {
+      facets.categories = aggregations.categories.categories.buckets.map((bucket: any) => ({
         value: bucket.key,
         count: bucket.doc_count
       }))

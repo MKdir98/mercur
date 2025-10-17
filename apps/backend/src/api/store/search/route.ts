@@ -17,6 +17,7 @@ const SearchParamsSchema = z.object({
   query: z.string().optional(),
   filters: z.string().optional(),
   category_id: z.string().optional(),
+  category: z.string().optional(),
   collection_id: z.string().optional(),
   seller_handle: z.string().optional(),
   locale: z.string().optional(),
@@ -24,6 +25,9 @@ const SearchParamsSchema = z.object({
   limit: z.number().min(1).max(100).default(20),
   min_price: z.number().optional(),
   max_price: z.number().optional(),
+  color: z.string().optional(),
+  size: z.string().optional(),
+  condition: z.string().optional(),
   sort_by: z.string().optional(),
   facets: z.string().optional()
 })
@@ -125,6 +129,7 @@ export const GET = async (
       return
       
     } catch (error) {
+      console.error('Error searching products:', error);
       console.warn('Elasticsearch service not found, using fallback to regular products API')
     }
     
@@ -145,16 +150,17 @@ export const GET = async (
       entity: 'product',
       fields: [
         'id',
-        'title', 
+        'title',
         'subtitle',
         'description',
         'handle',
         'thumbnail',
+        'images.*',
         'status',
         'created_at',
         'updated_at',
-        'variants.id',
-        'variants.title',
+        'variants.*',
+        'variants.inventory_quantity',
         'variants.prices.*'
       ],
       filters,
@@ -164,10 +170,22 @@ export const GET = async (
       }
     })
     
+    // Keep only variants with stock > 0 and drop products with none
+    const productsWithStockOnly = (products || [])
+      .map((product: any) => {
+        const variants = Array.isArray(product.variants) ? product.variants : []
+        const inStockVariants = variants.filter((variant: any) =>
+          typeof variant.inventory_quantity === 'number' && variant.inventory_quantity > 0
+        )
+        if (inStockVariants.length === 0) return null
+        return { ...product, variants: inStockVariants }
+      })
+      .filter(Boolean)
+
     // Calculate prices with promotions for search results
     const pricingService = req.scope.resolve(Modules.PRICING)
     
-    const productsWithCalculatedPrices = await Promise.all((products || []).map(async (product: any) => {
+    const productsWithCalculatedPrices = await Promise.all((productsWithStockOnly as any[]).map(async (product: any) => {
       if (!product.variants?.length) return product
       
       const variantsWithPrices = await Promise.all(
@@ -222,7 +240,6 @@ export const GET = async (
           }
         })
       )
-
       return {
         ...product,
         variants: variantsWithPrices

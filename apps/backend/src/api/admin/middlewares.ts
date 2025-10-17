@@ -1,5 +1,6 @@
 import { MiddlewareRoute } from '@medusajs/framework'
 
+// import { adminApiClientsMiddlewares } from './api-clients/middlewares'  // Temporarily disabled
 import { attributeMiddlewares } from './attributes/middlewares'
 import { citiesMiddlewares } from './cities/middlewares'
 import { commissionMiddlewares } from './commission/middlewares'
@@ -21,5 +22,6 @@ export const adminMiddlewares: MiddlewareRoute[] = [
   ...reviewsMiddlewares,
   ...attributeMiddlewares,
   ...adminProductsMiddlewares,
-  ...citiesMiddlewares
+  ...citiesMiddlewares,
+  // ...adminApiClientsMiddlewares  // Temporarily disabled
 ]

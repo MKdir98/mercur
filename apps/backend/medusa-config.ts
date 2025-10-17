@@ -34,6 +34,9 @@ module.exports = defineConfig({
     { resolve: '@mercurjs/split-order-payment' },
     { resolve: '@mercurjs/attribute' },
     { resolve: '@mercurjs/city' },
+    { resolve: '@mercurjs/support-ticket' },
+    // TODO: Fix TypeScript errors before enabling
+    // { resolve: '@mercurjs/api-client' },
     {
       resolve: '@mercurjs/taxcode',
       options: {
