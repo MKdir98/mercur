@@ -1,11 +1,11 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { SUPPORT_TICKET_MODULE } from "@mercurjs/support-ticket"
+import { SUPPORT_TICKET_MODULE, SupportTicketModuleService } from "@mercurjs/support-ticket"
 
 export async function GET(
   req: MedusaRequest,
   res: MedusaResponse
 ): Promise<void> {
-  const supportTicketService = req.scope.resolve(SUPPORT_TICKET_MODULE)
+  const supportTicketService = req.scope.resolve(SUPPORT_TICKET_MODULE) as SupportTicketModuleService
   const { id } = req.params
 
   try {
@@ -25,17 +25,22 @@ export async function GET(
   }
 }
 
+type UpdateTicketBody = {
+  status?: string
+  admin_notes?: string
+}
+
 export async function POST(
-  req: MedusaRequest,
+  req: MedusaRequest<UpdateTicketBody>,
   res: MedusaResponse
 ): Promise<void> {
-  const supportTicketService = req.scope.resolve(SUPPORT_TICKET_MODULE)
+  const supportTicketService = req.scope.resolve(SUPPORT_TICKET_MODULE) as SupportTicketModuleService
   const idParam = (req.params as any)?.id || (req.query as any)?.id || (req.body as any)?.id
 
   try {
     const { status, admin_notes } = req.body
 
-    const updateData: any = {}
+    const updateData: any = { id: idParam }
     if (status) updateData.status = status
     if (admin_notes !== undefined) updateData.admin_notes = admin_notes
 
@@ -44,7 +49,7 @@ export async function POST(
       return
     }
 
-    const ticket = await supportTicketService.updateSupportTickets(idParam, updateData)
+    const ticket = await supportTicketService.updateSupportTickets(updateData)
 
     res.json({ ticket })
   } catch (error) {

@@ -1,11 +1,11 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { SUPPORT_TICKET_MODULE } from "@mercurjs/support-ticket"
+import { SUPPORT_TICKET_MODULE, SupportTicketModuleService } from "@mercurjs/support-ticket"
 
 export async function GET(
   req: MedusaRequest,
   res: MedusaResponse
 ): Promise<void> {
-  const supportTicketService = req.scope.resolve(SUPPORT_TICKET_MODULE)
+  const supportTicketService = req.scope.resolve(SUPPORT_TICKET_MODULE) as SupportTicketModuleService
 
   try {
     const { skip = 0, take = 50, status, type } = req.query

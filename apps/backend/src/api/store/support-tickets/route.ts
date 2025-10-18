@@ -1,11 +1,11 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { SUPPORT_TICKET_MODULE } from "@mercurjs/support-ticket"
+import { SUPPORT_TICKET_MODULE, SupportTicketModuleService } from "@mercurjs/support-ticket"
 
 type CreateTicketBody = {
   name: string
   email: string
   phone?: string
-  type: string
+  type: 'support' | 'complaint' | 'partnership' | 'suggestion'
   subject: string
   message: string
 }
@@ -14,7 +14,7 @@ export async function POST(
   req: MedusaRequest<CreateTicketBody>,
   res: MedusaResponse
 ): Promise<void> {
-  const supportTicketService = req.scope.resolve(SUPPORT_TICKET_MODULE)
+  const supportTicketService = req.scope.resolve(SUPPORT_TICKET_MODULE) as SupportTicketModuleService
 
   const { name, email, phone, type, subject, message } = req.body
 
