@@ -35,7 +35,8 @@ export const GET = async (
         'status',
         'images.*',
         'variants.*',
-        'variants.inventory_quantity',
+        'variants.inventory_items.inventory.location_levels.stocked_quantity',
+        'variants.inventory_items.inventory.location_levels.reserved_quantity',
         'variants.prices.*'
       ],
       filters: {
@@ -52,8 +53,23 @@ export const GET = async (
     // Calculate prices with promotions for popular products
     const pricingService = req.scope.resolve(Modules.PRICING)
     
+    // Calculate inventory quantity for each variant
+    const productsWithInventory = (products || []).map((product: any) => {
+      if (!product.variants?.length) return product
+      
+      const variantsWithInventory = product.variants.map((variant: any) => {
+        const inventoryQuantity = (variant.inventory_items || [])
+          .flatMap((item: any) => (item.inventory?.location_levels || []))
+          .reduce((sum: number, level: any) => sum + (Number(level.stocked_quantity) || 0) - (Number(level.reserved_quantity) || 0), 0)
+        
+        return { ...variant, inventory_quantity: inventoryQuantity }
+      })
+      
+      return { ...product, variants: variantsWithInventory }
+    })
+
     // Filter to only include variants with stock > 0, and drop products without any in-stock variants
-    const productsWithStockOnly = (products || [])
+    const productsWithStockOnly = productsWithInventory
       .map((product: any) => {
         const variants = Array.isArray(product.variants) ? product.variants : []
         const inStockVariants = variants.filter((variant: any) =>
