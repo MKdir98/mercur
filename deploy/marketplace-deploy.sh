@@ -28,9 +28,9 @@ PROJECTS[backend]="mercur:9000:apps/backend"
 PROJECTS[vendor]="vendor-panel:5173"
 
 # Domain configuration
-STOREFRONT_DOMAIN="yourdomain.com"
-BACKEND_DOMAIN="api.yourdomain.com"
-VENDOR_DOMAIN="vendor.yourdomain.com"
+STOREFRONT_DOMAIN="doorfestival.com"
+BACKEND_DOMAIN="core.doorfestival.com"
+VENDOR_DOMAIN="brand.doorfestival.com"
 
 # Database configuration
 DB_NAME="mercur"
@@ -292,10 +292,11 @@ EOF
     local backend_env="$DEPLOY_DIR/mercur/apps/backend/.env"
     if [ ! -f "$backend_env" ]; then
         cat > "$backend_env" << EOF
-STORE_CORS=http://$STOREFRONT_DOMAIN
-ADMIN_CORS=http://$BACKEND_DOMAIN
-VENDOR_CORS=http://$VENDOR_DOMAIN
-AUTH_CORS=http://$BACKEND_DOMAIN,http://$VENDOR_DOMAIN,http://$STOREFRONT_DOMAIN
+# CORS Configuration - Include both HTTP and HTTPS
+STORE_CORS=http://$STOREFRONT_DOMAIN,https://$STOREFRONT_DOMAIN,http://www.$STOREFRONT_DOMAIN,https://www.$STOREFRONT_DOMAIN
+ADMIN_CORS=http://$BACKEND_DOMAIN,https://$BACKEND_DOMAIN
+VENDOR_CORS=http://$VENDOR_DOMAIN,https://$VENDOR_DOMAIN
+AUTH_CORS=http://$BACKEND_DOMAIN,https://$BACKEND_DOMAIN,http://$VENDOR_DOMAIN,https://$VENDOR_DOMAIN,http://$STOREFRONT_DOMAIN,https://$STOREFRONT_DOMAIN
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=$(openssl rand -base64 32)
 COOKIE_SECRET=$(openssl rand -base64 32)
@@ -493,6 +494,9 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
     
+    # CORS headers for authentication
+    add_header Access-Control-Allow-Credentials "true" always;
+    
     # Client settings
     client_max_body_size 100M;
     client_body_timeout 120s;
@@ -513,6 +517,11 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Important for authentication and cookies
+        proxy_pass_header Set-Cookie;
+        proxy_pass_header Authorization;
+        proxy_cookie_path / /;
         
         proxy_cache_bypass $http_upgrade;
         

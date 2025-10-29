@@ -27,6 +27,7 @@ export const mercurQuery = async (
   )
   const response = await fetch(`${url}${params && `?${params}`}`, {
     method: method,
+    credentials: 'include', // Ensure cookies are sent
     headers: {
       authorization: `Bearer ${bearer}`,
       'Content-Type': 'application/json',
