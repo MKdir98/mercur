@@ -16,7 +16,7 @@ module.exports = defineConfig({
     }
   },
   admin: {
-     vite: () => ({
+    vite: () => ({
       server: {
         allowedHosts: true,
       },

@@ -12,11 +12,15 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SingleColumnLayout } from "../../layouts/single-column";
 import { useAttributeTableColumns } from "../../hooks/table/columns/use-attribute-table-columns";
+import { useAuthInterceptor } from "../../hooks/use-auth-interceptor";
 
 import { AttributeDTO } from "../../../modules/attribute/types";
 import { useAttributes } from "../../hooks/api/attributes";
 
 const AttributesPage = () => {
+  // Initialize auth interceptor
+  useAuthInterceptor()
+  
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const pageSize = 10;

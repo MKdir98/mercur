@@ -12,6 +12,7 @@ import {
 } from "@medusajs/ui";
 import { useMemo, useState } from "react";
 import { useSellersTableQuery, validateEmail } from "./helpers";
+import { useAuthInterceptor } from "../../hooks/use-auth-interceptor";
 
 import { ActionsButton } from "../../common/ActionsButton";
 import { PencilSquare, Shopping, User } from "@medusajs/icons";
@@ -33,6 +34,9 @@ type SellersResponse = {
 }
 
 const SellersListPage = () => {
+  // Initialize auth interceptor
+  useAuthInterceptor()
+  
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const { searchParams, raw } = useSellersTableQuery({
