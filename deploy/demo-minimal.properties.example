@@ -1,0 +1,73 @@
+# ============================================================================
+# Demo Configuration - Minimal (تنظیمات حداقلی)
+# ============================================================================
+# کپی: cp demo-minimal.properties.example my-demo.properties
+# دیپلوی: sudo bash deploy.sh my-demo.properties deploy
+# ============================================================================
+
+# Mode & Paths
+MODE=demo
+DEPLOY_DIR=/var/www/marketplace-demo
+
+# GitHub
+GITHUB_USERNAME=mkdir98
+STOREFRONT_REPO=b2c-marketplace-storefront
+BACKEND_REPO=mercur
+VENDOR_REPO=vendor-panel
+
+# Ports (باید با production متفاوت باشند)
+STOREFRONT_PORT=3001
+BACKEND_PORT=9001
+VENDOR_PORT=5174
+
+# Domains (DNS باید قبل از SSL آماده باشه)
+STOREFRONT_DOMAIN=demo.doorfestival.com
+BACKEND_DOMAIN=demo-core.doorfestival.com
+VENDOR_DOMAIN=demo-brand.doorfestival.com
+
+# Database (⚠️ پسورد رو عوض کن!)
+DB_NAME=mercur_demo
+DB_USER=mercuruser_demo
+DB_PASSWORD=CHANGE_ME_secure_password_123
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# Site Info
+DEFAULT_REGION=us
+SITE_NAME=Marketplace Demo
+SITE_DESCRIPTION=Demo environment
+
+# Stripe (⚠️ از test keys استفاده کن)
+STRIPE_PUBLIC_KEY=pk_test_XXXXXXXXXXXXXXXXXXXXXXXXXXX
+STRIPE_SECRET_KEY=sk_test_XXXXXXXXXXXXXXXXXXXXXXXXXXX
+STRIPE_WEBHOOK_SECRET=whsec_XXXXXXXXXXXXXXXXXXXXXXXX
+
+# Medusa
+MEDUSA_PUBLISHABLE_KEY=pk_demo_XXXXXXXXXXXXXXXXXX
+REVALIDATE_SECRET=CHANGE_ME_random_string_456
+
+# Resend Email
+RESEND_API_KEY=re_XXXXXXXXXXXXXXXXXXXXXXXX
+RESEND_FROM_EMAIL=noreply-demo@doorfestival.com
+
+# Algolia Search
+ALGOLIA_APP_ID=XXXXXXXXXX
+ALGOLIA_SEARCH_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+ALGOLIA_ADMIN_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# TalkJS Chat
+TALKJS_APP_ID=tXXXXXXXX
+TALKJS_SECRET_KEY=sk_test_XXXXXXXXXXXXXXXXXXXXXXXX
+
+# SMS.ir (برای ایران)
+SMS_IR_API_KEY=CHANGE_ME_sms_ir_key
+SMS_IR_LINE_NUMBER=2
+SMS_IR_TEMPLATE_ID=552147
+SMS_IR_SANDBOX_API_KEY=sandbox_key
+SMS_IR_SANDBOX_LINE_NUMBER=sandbox_line
+
+# Feature Flags
+DISABLE_SELLERS_REGISTRATION=false
+
+

@@ -138,8 +138,17 @@ export async function POST(
 
         const customer = customers[0]
 
+        // ذخیره customer در session
+        if (req.session) {
+          req.session.auth_context = {
+            actor_id: customer.id,
+            actor_type: "customer",
+          }
+          req.session.customer_id = customer.id
+        }
+
         // تولید token
-        const token = `token_${customer.id}_${Date.now()}`
+        const token = `cust_${customer.id}_${Date.now()}`
 
         res.json({
           success: true,

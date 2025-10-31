@@ -1,0 +1,236 @@
+# ============================================================================
+# Demo Environment Configuration - Example File
+# ============================================================================
+# 
+# استفاده: 
+# 1. این فایل رو کپی کن:
+#    cp demo.properties.example my-demo.properties
+# 
+# 2. مقادیر رو ویرایش کن و پسوردها و API key ها رو عوض کن
+# 
+# 3. دیپلوی کن:
+#    sudo bash deploy.sh my-demo.properties deploy
+#
+# ============================================================================
+
+# ============================================================================
+# بخش اصلی - ضروری
+# ============================================================================
+
+# Deployment Mode - حتما باید تنظیم بشه
+# مثال: demo, production, staging, test
+MODE=demo
+
+# Deployment Directory - مسیر دیپلوی روی سرور
+# هر environment باید یک مسیر جداگانه داشته باشه
+DEPLOY_DIR=/var/www/marketplace-demo
+
+# ============================================================================
+# GitHub Configuration - تنظیمات گیت‌هاب
+# ============================================================================
+
+# GitHub Username - نام کاربری گیت‌هاب شما
+GITHUB_USERNAME=mkdir98
+
+# Repository Names - نام ریپوزیتوری‌ها
+STOREFRONT_REPO=b2c-marketplace-storefront
+BACKEND_REPO=mercur
+VENDOR_REPO=vendor-panel
+
+# ============================================================================
+# Application Ports - پورت‌های اپلیکیشن
+# ============================================================================
+# توجه: هر environment باید پورت‌های متفاوتی داشته باشه
+
+# Storefront Port (Next.js)
+# Demo: 3001, Production: 3000
+STOREFRONT_PORT=3001
+
+# Backend API Port (Medusa)
+# Demo: 9001, Production: 9000
+BACKEND_PORT=9001
+
+# Vendor Panel Port (Vite)
+# Demo: 5174, Production: 5173
+VENDOR_PORT=5174
+
+# ============================================================================
+# Domain Configuration - تنظیمات دامنه
+# ============================================================================
+# توجه: قبل از setup SSL، مطمئن شو که DNS record ها آماده هستند
+
+# Storefront Domain - دامنه فروشگاه
+STOREFRONT_DOMAIN=demo.doorfestival.com
+
+# Backend API Domain - دامنه API بک‌اند
+BACKEND_DOMAIN=demo-core.doorfestival.com
+
+# Vendor Panel Domain - دامنه پنل فروشندگان
+VENDOR_DOMAIN=demo-brand.doorfestival.com
+
+# ============================================================================
+# Database Configuration - تنظیمات دیتابیس PostgreSQL
+# ============================================================================
+# هر environment باید دیتابیس جداگانه‌ای داشته باشه
+
+# Database Name - نام دیتابیس
+DB_NAME=mercur_demo
+
+# Database User - نام کاربری دیتابیس
+DB_USER=mercuruser_demo
+
+# Database Password - پسورد دیتابیس
+# ⚠️ حتما این پسورد رو عوض کن!
+DB_PASSWORD=demo_secure_password_CHANGE_ME_123
+
+# ============================================================================
+# Redis Configuration - تنظیمات Redis
+# ============================================================================
+
+# Redis URL - آدرس Redis
+# معمولاً نیازی به تغییر نیست مگر اینکه Redis روی سرور دیگه‌ای باشه
+REDIS_URL=redis://localhost:6379
+
+# ============================================================================
+# Regional Settings - تنظیمات منطقه‌ای
+# ============================================================================
+
+# Default Region - منطقه پیش‌فرض
+# مثال: us, ir, eu
+DEFAULT_REGION=us
+
+# ============================================================================
+# Site Information - اطلاعات سایت
+# ============================================================================
+
+# Site Name - نام سایت (نمایش داده میشه در صفحات)
+SITE_NAME=Marketplace Demo
+
+# Site Description - توضیحات سایت (برای SEO)
+SITE_DESCRIPTION=Demo environment for marketplace testing
+
+# ============================================================================
+# Stripe Configuration - تنظیمات Stripe
+# ============================================================================
+# برای demo از test keys استفاده کن (pk_test_... و sk_test_...)
+# برای production از live keys استفاده کن (pk_live_... و sk_live_...)
+
+# Stripe Public Key - کلید عمومی Stripe (Frontend)
+# از https://dashboard.stripe.com/test/apikeys دریافت کن
+STRIPE_PUBLIC_KEY=pk_test_51XxxxxxXxxxxxxXxxxxxxXxxxxxxXxxxxxxXxxxxxxXxxxxxxXxxxxxxXxxxxxxXxxx
+
+# Stripe Secret Key - کلید محرمانه Stripe (Backend)
+# ⚠️ این کلید رو محرمانه نگه دار!
+STRIPE_SECRET_KEY=sk_test_51XxxxxxXxxxxxxXxxxxxxXxxxxxxXxxxxxxXxxxxxxXxxxxxxXxxxxxxXxxxxxxXxxx
+
+# Stripe Webhook Secret - کلید webhook
+# از https://dashboard.stripe.com/test/webhooks دریافت کن
+STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# ============================================================================
+# Medusa Configuration - تنظیمات Medusa
+# ============================================================================
+
+# Medusa Publishable Key - کلید قابل انتشار Medusa
+# این کلید از Admin Panel Medusa ساخته میشه
+MEDUSA_PUBLISHABLE_KEY=pk_demo_01XXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# Revalidate Secret - کلید revalidation برای Next.js
+# یک رشته تصادفی و امن بساز
+REVALIDATE_SECRET=demo_revalidate_secret_CHANGE_ME_456
+
+# ============================================================================
+# Email Configuration (Resend) - تنظیمات ایمیل
+# ============================================================================
+# برای ارسال ایمیل از سرویس Resend استفاده میشه
+
+# Resend API Key - کلید API از https://resend.com
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Resend From Email - ایمیل فرستنده
+# باید این دامنه رو در Resend verify کنی
+RESEND_FROM_EMAIL=noreply-demo@doorfestival.com
+
+# ============================================================================
+# Algolia Configuration - تنظیمات جستجو با Algolia
+# ============================================================================
+# برای search functionality
+
+# Algolia App ID - شناسه اپلیکیشن Algolia
+ALGOLIA_APP_ID=XXXXXXXXXX
+
+# Algolia Search Key - کلید جستجوی عمومی (Frontend)
+ALGOLIA_SEARCH_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Algolia Admin Key - کلید مدیریت (Backend)
+# ⚠️ این کلید رو محرمانه نگه دار!
+ALGOLIA_ADMIN_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# ============================================================================
+# TalkJS Configuration - تنظیمات چت
+# ============================================================================
+# برای سیستم چت و messaging
+
+# TalkJS App ID - شناسه اپلیکیشن TalkJS
+TALKJS_APP_ID=txxxxxxxx
+
+# TalkJS Secret Key - کلید محرمانه TalkJS
+# ⚠️ این کلید رو محرمانه نگه دار!
+TALKJS_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# ============================================================================
+# SMS.ir Configuration - تنظیمات پیامک (ایران)
+# ============================================================================
+# برای ارسال OTP و پیامک‌های تاییدیه
+
+# SMS.ir API Key - کلید API از https://app.sms.ir
+# برای demo میتونی از sandbox key استفاده کنی
+SMS_IR_API_KEY=demo_sms_ir_api_key_CHANGE_ME
+
+# SMS.ir Line Number - شماره خط ارسال پیامک
+SMS_IR_LINE_NUMBER=2
+
+# SMS.ir Template ID - شناسه قالب پیامک
+# این شماره رو باید در پنل SMS.ir بسازی
+SMS_IR_TEMPLATE_ID=552147
+
+# SMS.ir Sandbox Configuration - برای تست
+SMS_IR_SANDBOX_API_KEY=sandbox_demo_key
+SMS_IR_SANDBOX_LINE_NUMBER=sandbox_line
+
+# ============================================================================
+# Feature Flags - تنظیمات ویژگی‌ها
+# ============================================================================
+
+# Disable Sellers Registration - غیرفعال کردن ثبت‌نام فروشندگان
+# true = غیرفعال، false = فعال
+DISABLE_SELLERS_REGISTRATION=false
+
+# ============================================================================
+# نکات مهم:
+# ============================================================================
+# 
+# 1. همه مقادیری که "CHANGE_ME" یا "your_" دارند باید حتما تغییر کنند
+# 
+# 2. برای تولید پسورد امن:
+#    openssl rand -base64 32
+# 
+# 3. Test vs Production Keys:
+#    - Demo/Test: pk_test_..., sk_test_...
+#    - Production: pk_live_..., sk_live_...
+# 
+# 4. هر environment باید از:
+#    - پورت‌های متفاوت
+#    - دامنه‌های متفاوت
+#    - دیتابیس متفاوت
+#    - مسیر دیپلوی متفاوت
+#    استفاده کنه
+# 
+# 5. قبل از setup SSL، مطمئن شو DNS record ها آماده هستند
+# 
+# 6. بعد از ویرایش، دیپلوی کن:
+#    sudo bash deploy.sh my-demo.properties deploy
+#
+# ============================================================================
+
+

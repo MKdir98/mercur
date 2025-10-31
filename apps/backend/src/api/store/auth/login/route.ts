@@ -126,8 +126,21 @@ export async function POST(
       return
     }
 
-    // تولید token
-    const token = `token_${customer.id}_${Date.now()}`
+    // ذخیره customer در session/auth context
+    // به جای تولید token دستی، از session Medusa استفاده می‌کنیم
+    
+    // Set auth context برای Medusa
+    if (req.session) {
+      req.session.auth_context = {
+        actor_id: customer.id,
+        actor_type: "customer",
+      }
+      req.session.customer_id = customer.id
+    }
+
+    // تولید یک token ساده برای frontend
+    // این token فقط برای شناسایی customer استفاده می‌شود
+    const token = `cust_${customer.id}_${Date.now()}`
 
     res.json({
       success: true,
@@ -138,6 +151,7 @@ export async function POST(
         first_name: customer.first_name,
         last_name: customer.last_name,
         phone: customer.phone,
+        email: customer.email,
       },
     })
   } catch (error) {
