@@ -446,12 +446,25 @@ build_projects() {
 setup_nginx() {
     print_step "Configuring Nginx..."
     
+    # Check if SSL is already configured
+    local has_ssl=false
+    if [ -f /etc/nginx/sites-available/marketplace ] && grep -q "listen 443 ssl" /etc/nginx/sites-available/marketplace; then
+        has_ssl=true
+        print_warning "SSL configuration detected! Preserving existing config."
+        print_warning "If you need to reset Nginx config, manually delete:"
+        print_warning "  /etc/nginx/sites-available/marketplace"
+        print_warning "Then run deploy again."
+        echo ""
+        return 0
+    fi
+    
     # Backup existing config if it exists
     if [ -f /etc/nginx/sites-available/marketplace ]; then
         cp /etc/nginx/sites-available/marketplace /etc/nginx/sites-available/marketplace.backup.$(date +%Y%m%d_%H%M%S)
+        print_info "Backed up existing Nginx config"
     fi
     
-    # Create nginx configuration
+    # Create nginx configuration (HTTP only - SSL will be added by certbot)
     cat > /etc/nginx/sites-available/marketplace << 'NGINXEOF'
 # Upstream definitions
 upstream backend {
@@ -855,6 +868,71 @@ setup_ssl_auto() {
 }
 
 ###############################################################################
+# Update Only Function (Preserves Nginx/SSL config)
+###############################################################################
+
+update_only() {
+    print_banner
+    
+    print_info "Starting update process (SSL-safe)..."
+    echo ""
+    
+    # Check root privileges
+    check_root
+    
+    # Clone or update projects
+    print_step "Updating projects..."
+    clone_or_update_project "Storefront" "b2c-marketplace-storefront"
+    clone_or_update_project "Backend" "mercur"
+    clone_or_update_project "Vendor Panel" "vendor-panel"
+    echo ""
+    
+    # Check if env files exist
+    if [ ! -f "$DEPLOY_DIR/b2c-marketplace-storefront/.env.production" ] || \
+       [ ! -f "$DEPLOY_DIR/mercur/apps/backend/.env" ] || \
+       [ ! -f "$DEPLOY_DIR/vendor-panel/.env.production" ]; then
+        print_error "Environment files not found! Please run 'deploy' first."
+        exit 1
+    fi
+    
+    # Build projects
+    build_projects
+    echo ""
+    
+    # Restart services (no nginx config change)
+    print_step "Restarting services..."
+    cd "$DEPLOY_DIR"
+    pm2 restart all
+    
+    # Wait a moment for services to initialize
+    sleep 3
+    
+    # Show status
+    pm2 status
+    echo ""
+    
+    # Success message
+    print_success "════════════════════════════════════════════════════════"
+    print_success "Update completed successfully! 🚀"
+    print_success "════════════════════════════════════════════════════════"
+    echo ""
+    print_info "SSL/Nginx configuration was NOT modified (preserved)"
+    echo ""
+    print_info "Your applications are now running with latest code:"
+    echo ""
+    echo "  📱 Storefront:    http://$STOREFRONT_DOMAIN"
+    echo "  🔧 Backend API:   http://$BACKEND_DOMAIN"
+    echo "  👥 Vendor Panel:  http://$VENDOR_DOMAIN"
+    echo ""
+    print_info "Useful commands:"
+    echo ""
+    echo "  View logs:        pm2 logs"
+    echo "  View status:      pm2 status"
+    echo "  Monitor:          pm2 monit"
+    echo ""
+}
+
+###############################################################################
 # Deployment Function
 ###############################################################################
 
@@ -909,7 +987,7 @@ deploy() {
     build_projects
     echo ""
     
-    # Setup Nginx
+    # Setup Nginx (with SSL preservation check)
     setup_nginx
     echo ""
     
@@ -946,8 +1024,9 @@ deploy() {
     echo "  Stop all:         pm2 stop all"
     echo "  Monitor:          pm2 monit"
     echo ""
-    echo "  Update & redeploy: sudo bash $0 deploy"
-    echo "  Setup SSL:         sudo bash $0 ssl"
+    echo "  Update code (SSL-safe): sudo bash $0 update"
+    echo "  Full redeploy:          sudo bash $0 deploy"
+    echo "  Setup SSL:              sudo bash $0 ssl"
     echo ""
     
     # Setup SSL if requested
@@ -969,6 +1048,9 @@ deploy() {
 ###############################################################################
 
 case "${1:-}" in
+    update)
+        update_only
+        ;;
     deploy)
         deploy false
         ;;
@@ -985,24 +1067,36 @@ case "${1:-}" in
         echo "Usage: sudo bash $0 [COMMAND]"
         echo ""
         echo "Commands:"
-        echo "  deploy        Deploy without SSL (HTTP only)"
-        echo "  deploy-ssl    Deploy and automatically setup SSL (HTTPS)"
+        echo "  update        Update code & rebuild (SSL-safe, preserves Nginx config)"
+        echo "  deploy        Full deployment without SSL (HTTP only)"
+        echo "  deploy-ssl    Full deployment and automatically setup SSL (HTTPS)"
         echo "  ssl           Setup SSL/HTTPS (run after deploy)"
         echo ""
         echo "Examples:"
+        echo "  sudo bash $0 update        # Update code only (recommended after SSL setup)"
         echo "  sudo bash $0 deploy        # First time deployment (HTTP)"
         echo "  sudo bash $0 ssl           # Add SSL after deployment"
         echo "  sudo bash $0 deploy-ssl    # Deploy everything with SSL"
         echo ""
         echo "What this script does:"
-        echo "  • Install dependencies (Node.js, Nginx, PostgreSQL, Redis, PM2)"
-        echo "  • Clone or update all three projects"
-        echo "  • Setup environment files"
-        echo "  • Build all projects"
-        echo "  • Configure Nginx as reverse proxy"
-        echo "  • Start services with PM2"
-        echo "  • Configure firewall"
-        echo "  • Setup SSL certificates (if ssl command used)"
+        echo ""
+        echo "  update command (SSL-safe):"
+        echo "    • Pull latest code from git"
+        echo "    • Build all projects"
+        echo "    • Restart PM2 services"
+        echo "    • Preserves Nginx/SSL configuration"
+        echo ""
+        echo "  deploy command (full):"
+        echo "    • Install dependencies (Node.js, Nginx, PostgreSQL, Redis, PM2)"
+        echo "    • Clone or update all three projects"
+        echo "    • Setup environment files"
+        echo "    • Build all projects"
+        echo "    • Configure Nginx as reverse proxy"
+        echo "    • Start services with PM2"
+        echo "    • Configure firewall"
+        echo ""
+        echo "  ssl command:"
+        echo "    • Setup SSL certificates (Let's Encrypt)"
         echo ""
         exit 1
         ;;
