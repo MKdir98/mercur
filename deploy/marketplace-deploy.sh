@@ -272,16 +272,33 @@ setup_env_files() {
     local storefront_env="$DEPLOY_DIR/b2c-marketplace-storefront/.env.production"
     if [ ! -f "$storefront_env" ]; then
         cat > "$storefront_env" << EOF
-MEDUSA_BACKEND_URL=http://$BACKEND_DOMAIN
+# Environment
+NEXT_PUBLIC_APP_ENV=production
+
+# Backend URLs
+NEXT_PUBLIC_MEDUSA_BACKEND_URL=http://$BACKEND_DOMAIN
 NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=your_publishable_key_here
+
+# Site URLs
 NEXT_PUBLIC_BASE_URL=http://$STOREFRONT_DOMAIN
 NEXT_PUBLIC_DEFAULT_REGION=us
+
+# Stripe
 NEXT_PUBLIC_STRIPE_KEY=your_stripe_key_here
+
+# Security
 REVALIDATE_SECRET=your_revalidate_secret_here
+
+# Site Info
 NEXT_PUBLIC_SITE_NAME="Marketplace"
 NEXT_PUBLIC_SITE_DESCRIPTION="Your Marketplace Description"
+
+# Algolia
 NEXT_PUBLIC_ALGOLIA_ID=your_algolia_id
 NEXT_PUBLIC_ALGOLIA_SEARCH_KEY=your_algolia_key
+
+# SMS - Frontend does NOT need these anymore (handled by backend)
+# NEXT_PUBLIC_ENABLE_SMS_DEBUG_PANEL=false
 EOF
         print_warning "Created $storefront_env - PLEASE EDIT IT!"
     else
@@ -292,32 +309,56 @@ EOF
     local backend_env="$DEPLOY_DIR/mercur/apps/backend/.env"
     if [ ! -f "$backend_env" ]; then
         cat > "$backend_env" << EOF
+# Environment
+APP_ENV=production
+
 # CORS Configuration - Include both HTTP and HTTPS
 STORE_CORS=http://$STOREFRONT_DOMAIN,https://$STOREFRONT_DOMAIN,http://www.$STOREFRONT_DOMAIN,https://www.$STOREFRONT_DOMAIN
 ADMIN_CORS=http://$BACKEND_DOMAIN,https://$BACKEND_DOMAIN
 VENDOR_CORS=http://$VENDOR_DOMAIN,https://$VENDOR_DOMAIN
 AUTH_CORS=http://$BACKEND_DOMAIN,https://$BACKEND_DOMAIN,http://$VENDOR_DOMAIN,https://$VENDOR_DOMAIN,http://$STOREFRONT_DOMAIN,https://$STOREFRONT_DOMAIN
+
+# Redis
 REDIS_URL=redis://localhost:6379
+
+# Security
 JWT_SECRET=$(openssl rand -base64 32)
 COOKIE_SECRET=$(openssl rand -base64 32)
+
+# Database
 DATABASE_URL=postgres://$DB_USER:$DB_PASSWORD@localhost:5432/$DB_NAME
 DB_NAME=$DB_NAME
 
+# Stripe
 STRIPE_SECRET_API_KEY=your_stripe_secret_key_here
 STRIPE_CONNECTED_ACCOUNTS_WEBHOOK_SECRET=your_webhook_secret_here
 
+# Email (Resend)
 RESEND_API_KEY=your_resend_api_key_here
 RESEND_FROM_EMAIL=noreply@$STOREFRONT_DOMAIN
 
+# Algolia
 ALGOLIA_APP_ID=your_algolia_app_id
 ALGOLIA_API_KEY=your_algolia_admin_key
 
+# TalkJS
 VITE_TALK_JS_APP_ID=your_talkjs_id
 VITE_TALK_JS_SECRET_API_KEY=your_talkjs_key
 
+# URLs
 VENDOR_PANEL_URL=http://$VENDOR_DOMAIN
 STOREFRONT_URL=http://$STOREFRONT_DOMAIN
 BACKEND_URL=http://$BACKEND_DOMAIN
+
+# SMS.ir Configuration (PRODUCTION)
+# دریافت این کلیدها از https://app.sms.ir
+SMS_IR_API_KEY=lQfV9ZncxneWKK96dTxpHua7x4ygHPoPVBVVaLguED1uttdH
+SMS_IR_LINE_NUMBER=2
+SMS_IR_TEMPLATE_ID=552147
+
+# SMS.ir Sandbox (برای تست - local/demo)
+SMS_IR_SANDBOX_API_KEY=sandbox_key
+SMS_IR_SANDBOX_LINE_NUMBER=sandbox_line
 EOF
         print_warning "Created $backend_env - PLEASE EDIT IT!"
     else
@@ -654,10 +695,11 @@ module.exports = {
     {
       name: 'vendor-panel',
       cwd: '/var/www/marketplace/vendor-panel',
-      script: 'serve',
-      args: '-s dist -l 5173 --no-clipboard',
+      script: '/usr/bin/env',
+      args: 'serve -s dist -l 5173 --no-clipboard',
       env: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        PATH: '/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin'
       },
       instances: 1,
       exec_mode: 'fork',

@@ -1,4 +1,5 @@
 import { MiddlewareRoute, authenticate } from '@medusajs/framework'
+import type { MedusaNextFunction, MedusaRequest, MedusaResponse } from '@medusajs/framework'
 
 import { storeCartsMiddlewares } from './carts/middlewares'
 import { storeOrderSetMiddlewares } from './order-set/middlewares'
@@ -9,7 +10,33 @@ import { storeSellerMiddlewares } from './seller/middlewares'
 import { storeShippingOptionRoutesMiddlewares } from './shipping-options/middlewares'
 import { storeWishlistMiddlewares } from './wishlist/middlewares'
 
+// Middleware که در local/demo authentication رو bypass می‌کنه
+const bypassAuthInLocalDemo = async (
+  req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+) => {
+  const isLocal = process.env.APP_ENV === 'local' || process.env.APP_ENV === 'demo'
+  
+  if (isLocal) {
+    // در local/demo، publishable key رو bypass می‌کنیم
+    return next()
+  }
+  
+  // در production، authentication لازمه (ولی برای auth endpoints نباید authenticate بخوایم)
+  return next()
+}
+
 export const storeMiddlewares: MiddlewareRoute[] = [
+  // Auth endpoints - بدون نیاز به authentication
+  {
+    matcher: '/store/auth/*',
+    middlewares: [bypassAuthInLocalDemo]
+  },
+  {
+    matcher: '/store/customers/phone/*',
+    middlewares: [bypassAuthInLocalDemo]
+  },
   {
     matcher: '/store/reviews/*',
     middlewares: [authenticate('customer', ['bearer', 'session'])]
