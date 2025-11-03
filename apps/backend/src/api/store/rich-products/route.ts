@@ -10,6 +10,9 @@ const RichProductsQuerySchema = z.object({
   region_id: z.string().optional(),
   sort_by: z.enum(['sales_count', 'created_at', 'updated_at', 'title']).optional().default('created_at'),
   seller_id: z.string().optional(),
+  handle: z.string().optional(),
+  category_id: z.string().optional(),
+  collection_id: z.string().optional(),
 })
 
 type RichProductsQueryType = z.infer<typeof RichProductsQuerySchema>
@@ -22,10 +25,25 @@ export const GET = async (
 
   try {
     const validatedQuery = RichProductsQuerySchema.parse(req.query)
-    const { limit, offset, sort_by, seller_id } = validatedQuery
+    const { limit, offset, sort_by, seller_id, handle, category_id, collection_id } = validatedQuery
 
     // Base filters for products
     const filters: Record<string, any> = { status: 'published' }
+    
+    // Add handle filter if provided
+    if (handle) {
+      filters['handle'] = handle
+    }
+    
+    // Add category filter if provided
+    if (category_id) {
+      filters['category_id'] = category_id
+    }
+    
+    // Add collection filter if provided
+    if (collection_id) {
+      filters['collection_id'] = collection_id
+    }
 
     // If seller_id is provided, resolve product_ids via seller-product link
     let productIdToSeller: Record<string, any> = {}
