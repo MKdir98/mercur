@@ -359,6 +359,10 @@ SMS_IR_TEMPLATE_ID=552147
 # SMS.ir Sandbox (برای تست - local/demo)
 SMS_IR_SANDBOX_API_KEY=sandbox_key
 SMS_IR_SANDBOX_LINE_NUMBER=sandbox_line
+
+# Postex Shipping Configuration
+# دریافت API Key از https://postex.ir
+POSTEX_API_KEY=your_postex_api_key_here
 EOF
         print_warning "Created $backend_env - PLEASE EDIT IT!"
     else

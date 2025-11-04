@@ -83,6 +83,9 @@ ALGOLIA_API_KEY=YOUR_ALGOLIA_ADMIN_KEY
 VITE_TALK_JS_APP_ID=xxx
 VITE_TALK_JS_SECRET_API_KEY=xxx
 
+# Postex shipping service (from postex.ir)
+POSTEX_API_KEY=your_postex_api_key_here
+
 # Application URLs (for links in emails, etc.)
 VENDOR_PANEL_URL=http://vendor.yourdomain.com
 STOREFRONT_URL=http://yourdomain.com
@@ -174,6 +177,18 @@ VITE_DISABLE_SELLERS_REGISTRATION=false
 **What you need:**
 - `VITE_TALK_JS_APP_ID`: App ID
 - `VITE_TALK_JS_SECRET_API_KEY`: Secret Key
+
+---
+
+### Postex (https://postex.ir)
+
+1. Create Postex account or contact their sales team
+2. Get API credentials from their dashboard
+3. Go to **Settings → API** or contact support
+4. Get your **API Key**
+
+**What you need:**
+- `POSTEX_API_KEY`: API Key for shipping integration
 
 ---
 
@@ -280,6 +295,7 @@ ALGOLIA_APP_ID=YOUR_ID
 ALGOLIA_API_KEY=YOUR_ADMIN_KEY
 VITE_TALK_JS_APP_ID=xxx
 VITE_TALK_JS_SECRET_API_KEY=xxx
+POSTEX_API_KEY=your_postex_api_key_here
 VENDOR_PANEL_URL=http://vendor.yourdomain.com
 STOREFRONT_URL=http://yourdomain.com
 BACKEND_URL=http://api.yourdomain.com

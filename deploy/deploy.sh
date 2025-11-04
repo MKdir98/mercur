@@ -440,6 +440,9 @@ SMS_IR_TEMPLATE_ID=${SMS_IR_TEMPLATE_ID:-552147}
 # SMS.ir Sandbox (for testing)
 SMS_IR_SANDBOX_API_KEY=${SMS_IR_SANDBOX_API_KEY:-sandbox_key}
 SMS_IR_SANDBOX_LINE_NUMBER=${SMS_IR_SANDBOX_LINE_NUMBER:-sandbox_line}
+
+# Postex Shipping Configuration
+POSTEX_API_KEY=${POSTEX_API_KEY:-your_postex_api_key_here}
 EOF
         print_warning "Created $backend_env - PLEASE EDIT IT!"
     else
