@@ -1,7 +1,7 @@
 import { AbstractFulfillmentProviderService } from "@medusajs/framework/utils"
 
 class PostexService extends AbstractFulfillmentProviderService {
-  static identifier = "پستکس"
+  static identifier = "postex"
   
   protected container_: any
   protected options_: any
