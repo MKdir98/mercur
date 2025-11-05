@@ -9,7 +9,7 @@ export * from './models';
 
 const cityModule = Module(CITY_MODULE, {
   service: CityModuleService,
-});
+}); 
 
 // Export linkable for use in module links
 export const linkable = {

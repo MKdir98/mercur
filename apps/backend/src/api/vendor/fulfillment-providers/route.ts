@@ -10,10 +10,16 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       fields: [
         "id",
         "is_enabled"
-      ]
+      ],
+      filters: {
+        is_enabled: true
+      }
     })
 
-    res.json({ fulfillment_providers: providers })
+    res.json({ 
+      fulfillment_providers: providers,
+      count: providers.length
+    })
   } catch (error) {
     console.error("Error fetching fulfillment providers:", error)
     res.status(500).json({
