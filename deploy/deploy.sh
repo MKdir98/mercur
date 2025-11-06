@@ -298,6 +298,148 @@ setup_database() {
 }
 
 ###############################################################################
+# Required Services Verification
+###############################################################################
+
+check_required_services() {
+    print_step "Checking required services..."
+    
+    local services_ok=true
+    local redis_ok=false
+    local elasticsearch_ok=false
+    
+    # Check Redis
+    print_info "Checking Redis..."
+    if command -v redis-cli &> /dev/null; then
+        if redis-cli ping &> /dev/null; then
+            print_success "Redis is running"
+            redis_ok=true
+        else
+            print_error "Redis is installed but not running"
+            print_info "Start Redis with: sudo systemctl start redis-server"
+            services_ok=false
+        fi
+    else
+        print_error "Redis is not installed"
+        print_info "Install Redis with: sudo apt-get install redis-server"
+        services_ok=false
+    fi
+    
+    # Check Elasticsearch
+    print_info "Checking Elasticsearch..."
+    local es_url="${ELASTICSEARCH_URL:-http://localhost:9200}"
+    
+    if command -v curl &> /dev/null; then
+        # Try to get response with timeout
+        local es_response=$(curl -s --max-time 5 "$es_url" 2>/dev/null)
+        local es_http_code=$(curl -s --max-time 5 "$es_url" -o /dev/null -w "%{http_code}" 2>/dev/null)
+        
+        # Check if we got any valid response (HTTP 200 or valid JSON with cluster info)
+        if [[ "$es_http_code" == "200" ]] || echo "$es_response" | grep -q "cluster_name"; then
+            print_success "Elasticsearch is running at $es_url"
+            elasticsearch_ok=true
+        else
+            # Check if Elasticsearch process is running but not responding properly
+            if systemctl is-active elasticsearch &>/dev/null || systemctl is-active elasticsearch.service &>/dev/null; then
+                print_warning "Elasticsearch service is running but not responding properly"
+                print_warning "This may indicate a configuration error (e.g., duplicate keys in YAML)"
+                print_info "Check config: sudo grep -E 'xpack.security|network.host|http.port' /etc/elasticsearch/elasticsearch.yml"
+                print_info "Check logs: sudo journalctl -u elasticsearch -n 50"
+            else
+                print_error "Elasticsearch is not responding at $es_url"
+                print_info "Check if Elasticsearch is running or install it"
+            fi
+            services_ok=false
+        fi
+    else
+        print_warning "curl not available, skipping Elasticsearch check"
+    fi
+    
+    # For production mode, these services are REQUIRED
+    if [ "$DEPLOY_MODE" = "production" ]; then
+        if [ "$services_ok" = false ]; then
+            echo ""
+            print_error "════════════════════════════════════════════════════════"
+            print_error "CRITICAL: Required services are not running!"
+            print_error "════════════════════════════════════════════════════════"
+            echo ""
+            print_error "For PRODUCTION deployment, you MUST have:"
+            echo ""
+            if [ "$redis_ok" = false ]; then
+                echo "  ✗ Redis (In-memory cache & session store)"
+                echo "    Install: sudo apt-get install redis-server"
+                echo "    Start:   sudo systemctl start redis-server"
+                echo "    Enable:  sudo systemctl enable redis-server"
+                echo ""
+            fi
+            if [ "$elasticsearch_ok" = false ]; then
+                echo "  ✗ Elasticsearch (Search engine)"
+                echo "    Install guide: https://www.elastic.co/guide/en/elasticsearch/reference/current/install-elasticsearch.html"
+                echo ""
+                echo "    Quick install (Ubuntu/Debian - NEW METHOD):"
+                echo "      # Download and install GPG key"
+                echo "      wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg"
+                echo ""
+                echo "      # Add repository"
+                echo "      echo \"deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main\" | sudo tee /etc/apt/sources.list.d/elastic-8.x.list"
+                echo ""
+                echo "      # Install"
+                echo "      sudo apt-get update"
+                echo "      sudo apt-get install elasticsearch"
+                echo ""
+                echo "      # Configure (disable security for local development)"
+                echo "      echo 'xpack.security.enabled: false' | sudo tee -a /etc/elasticsearch/elasticsearch.yml"
+                echo "      echo 'network.host: localhost' | sudo tee -a /etc/elasticsearch/elasticsearch.yml"
+                echo ""
+                echo "      # Start"
+                echo "      sudo systemctl daemon-reload"
+                echo "      sudo systemctl enable elasticsearch"
+                echo "      sudo systemctl start elasticsearch"
+                echo ""
+                echo "      # Wait and test (takes 30-60 seconds to start)"
+                echo "      sleep 30 && curl localhost:9200"
+                echo ""
+            fi
+            print_error "Please install and start the required services, then run deploy again."
+            print_error "════════════════════════════════════════════════════════"
+            exit 1
+        fi
+    else
+        # For non-production (demo, staging, etc), show warning but continue
+        if [ "$services_ok" = false ]; then
+            echo ""
+            print_warning "════════════════════════════════════════════════════════"
+            print_warning "WARNING: Some services are not running"
+            print_warning "════════════════════════════════════════════════════════"
+            echo ""
+            print_warning "Mode: $DEPLOY_MODE"
+            print_warning "Deployment will continue, but some features may not work:"
+            echo ""
+            if [ "$redis_ok" = false ]; then
+                echo "  ⚠ Redis - Caching and sessions will not work"
+            fi
+            if [ "$elasticsearch_ok" = false ]; then
+                echo "  ⚠ Elasticsearch - Search functionality will not work"
+            fi
+            echo ""
+            print_warning "Consider installing these services for full functionality."
+            print_warning "════════════════════════════════════════════════════════"
+            echo ""
+            
+            # Give user a chance to abort
+            read -p "Continue anyway? (y/n) " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                print_info "Deployment cancelled by user"
+                exit 0
+            fi
+        fi
+    fi
+    
+    print_success "Service verification completed"
+}
+
+###############################################################################
 # Project Management
 ###############################################################################
 
@@ -402,6 +544,9 @@ AUTH_CORS=http://$BACKEND_DOMAIN,https://$BACKEND_DOMAIN,http://$VENDOR_DOMAIN,h
 
 # Redis
 REDIS_URL=${REDIS_URL:-redis://localhost:6379}
+
+# Elasticsearch
+ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-http://localhost:9200}
 
 # Security
 JWT_SECRET=$(openssl rand -base64 32)
@@ -974,6 +1119,10 @@ update_only() {
     # Check root privileges
     check_root
     
+    # Check required services (Redis & Elasticsearch)
+    check_required_services
+    echo ""
+    
     # Clone or update projects
     print_step "Updating projects..."
     clone_or_update_project "Storefront" "$STOREFRONT_REPO"
@@ -1045,6 +1194,10 @@ deploy() {
     
     # Setup database
     setup_database
+    echo ""
+    
+    # Check required services (Redis & Elasticsearch)
+    check_required_services
     echo ""
     
     # Clone or update projects

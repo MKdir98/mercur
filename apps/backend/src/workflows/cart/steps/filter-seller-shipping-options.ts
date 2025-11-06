@@ -14,6 +14,10 @@ export const filterSellerShippingOptionsStep = createStep(
     input: { shipping_options: ShippingOptionDTO[]; cart_id: string },
     { container }
   ) => {
+    console.log('🟩 [FILTER_STEP] Starting - cart_id:', input.cart_id)
+    console.log('🟩 [FILTER_STEP] Input shipping options:', input.shipping_options?.length || 0)
+    console.log('🟩 [FILTER_STEP] Input option IDs:', input.shipping_options?.map(o => o.id) || [])
+    
     const query = container.resolve(ContainerRegistrationKeys.QUERY)
 
     const {
@@ -26,7 +30,11 @@ export const filterSellerShippingOptionsStep = createStep(
       }
     })
 
+    console.log('🟩 [FILTER_STEP] Cart items count:', cart.items?.length || 0)
+    console.log('🟩 [FILTER_STEP] Existing shipping methods:', cart.shipping_methods?.length || 0)
+
     if (!cart.items || cart.items.length === 0) {
+      console.log('⚠️  [FILTER_STEP] No items in cart - returning empty array')
       return new StepResponse([])
     }
 
@@ -38,9 +46,14 @@ export const filterSellerShippingOptionsStep = createStep(
       }
     })
 
+    const uniqueSellersInCart = [...new Set(sellersInCart.map((s) => s.seller_id))]
+    console.log('🟩 [FILTER_STEP] Sellers in cart:', uniqueSellersInCart)
+
     const existingShippingOptions = cart.shipping_methods.map(
       (sm) => sm.shipping_option_id
     )
+
+    console.log('🟩 [FILTER_STEP] Existing shipping option IDs:', existingShippingOptions)
 
     const { data: sellersAlreadyCovered } = await query.graph({
       entity: sellerShippingOption.entryPoint,
@@ -50,10 +63,15 @@ export const filterSellerShippingOptionsStep = createStep(
       }
     })
 
+    const uniqueSellersAlreadyCovered = [...new Set(sellersAlreadyCovered.map((s) => s.seller_id))]
+    console.log('🟩 [FILTER_STEP] Sellers already covered:', uniqueSellersAlreadyCovered)
+
     const sellersToFindShippingOptions = arrayDifference(
-      [...new Set(sellersInCart.map((s) => s.seller_id))],
-      [...new Set(sellersAlreadyCovered.map((s) => s.seller_id))]
+      uniqueSellersInCart,
+      uniqueSellersAlreadyCovered
     )
+
+    console.log('🟩 [FILTER_STEP] Sellers needing shipping options:', sellersToFindShippingOptions)
 
     const { data: sellerShippingOptions } = await query.graph({
       entity: sellerShippingOption.entryPoint,
@@ -63,9 +81,14 @@ export const filterSellerShippingOptionsStep = createStep(
       }
     })
 
+    console.log('🟩 [FILTER_STEP] Seller shipping options found:', sellerShippingOptions.length)
+    console.log('🟩 [FILTER_STEP] Seller shipping option IDs:', sellerShippingOptions.map(so => so.shipping_option_id))
+
     const applicableShippingOptions = sellerShippingOptions.map(
       (so) => so.shipping_option_id
     )
+
+    console.log('🟩 [FILTER_STEP] Applicable shipping option IDs:', applicableShippingOptions)
 
     const optionsAvailable = input.shipping_options
       .filter((option) => applicableShippingOptions.includes(option.id))
@@ -79,6 +102,9 @@ export const filterSellerShippingOptionsStep = createStep(
           seller_id: relation.seller.id
         }
       })
+
+    console.log('🟩 [FILTER_STEP] Final filtered options:', optionsAvailable.length)
+    console.log('🟩 [FILTER_STEP] Final option IDs:', optionsAvailable.map(o => o.id))
 
     return new StepResponse(optionsAvailable)
   }

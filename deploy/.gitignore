@@ -1,0 +1,25 @@
+# Ignore all .properties files (contain sensitive data)
+*.properties
+
+# EXCEPT template.properties (it's safe to commit)
+!template.properties
+
+# Backup files
+*.backup
+*.bak
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+
