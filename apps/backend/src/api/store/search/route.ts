@@ -2,7 +2,6 @@ import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys, Modules } from '@medusajs/framework/utils'
 import { z } from 'zod'
 
-// Type for Elasticsearch service (will be replaced with proper import when module is set up)
 interface ElasticsearchService {
   searchProducts(params: any): Promise<{
     products: any[]
@@ -12,7 +11,6 @@ interface ElasticsearchService {
   }>
 }
 
-// Validation schema for search parameters
 const SearchParamsSchema = z.object({
   query: z.string().optional(),
   filters: z.string().optional(),
@@ -34,71 +32,18 @@ const SearchParamsSchema = z.object({
 
 type SearchParamsType = z.infer<typeof SearchParamsSchema>
 
-/**
- * @oas [get] /store/search
- * operationId: "StoreSearchProducts"
- * summary: "Search Products"
- * description: "Search products using Elasticsearch with filters and facets"
- * parameters:
- *   - name: query
- *     in: query
- *     schema:
- *       type: string
- *     description: Search query text
- *   - name: filters
- *     in: query
- *     schema:
- *       type: string
- *     description: Filter string for products
- *   - name: category_id
- *     in: query
- *     schema:
- *       type: string
- *     description: Filter by category ID
- *   - name: seller_handle
- *     in: query
- *     schema:
- *       type: string
- *     description: Filter by seller handle
- *   - name: page
- *     in: query
- *     schema:
- *       type: number
- *     description: Page number for pagination
- *   - name: limit
- *     in: query
- *     schema:
- *       type: number
- *     description: Number of items per page
- * responses:
- *   "200":
- *     description: OK
- *     content:
- *       application/json:
- *         schema:
- *           type: object
- *           properties:
- *             products:
- *               type: array
- *               description: Array of products
- *             facets:
- *               type: object
- *               description: Available facets for filtering
- *             pagination:
- *               type: object
- *               description: Pagination information
- *             total:
- *               type: number
- *               description: Total number of results
- * tags:
- *   - Store Search
- */
 export const GET = async (
   req: MedusaRequest<SearchParamsType>,
   res: MedusaResponse
 ) => {
+  console.log('[Backend Search API] 🔍 Received search request:', {
+    query: req.query,
+    headers: {
+      publishableKey: req.headers['x-publishable-api-key'] ? '✅ Present' : '❌ Missing'
+    }
+  })
+  
   try {
-    // Validate query parameters
     const searchParams = SearchParamsSchema.parse({
       ...req.query,
       page: req.query.page ? Number(req.query.page) : 1,
@@ -106,14 +51,22 @@ export const GET = async (
       min_price: req.query.min_price ? Number(req.query.min_price) : undefined,
       max_price: req.query.max_price ? Number(req.query.max_price) : undefined
     })
+    
+    console.log('[Backend Search API] ✅ Validated params:', searchParams)
 
-    // Get Elasticsearch service from container
     let elasticsearchService: ElasticsearchService
     try {
+      console.log('[Backend Search API] 🔌 Attempting to resolve Elasticsearch service...')
       elasticsearchService = req.scope.resolve('elasticsearchService') as ElasticsearchService
       
-      // If service exists, use it
+      console.log('[Backend Search API] ✅ Elasticsearch service found, searching...')
       const searchResults = await elasticsearchService.searchProducts(searchParams)
+      
+      console.log('[Backend Search API] 📥 Elasticsearch results:', {
+        productsCount: searchResults.products?.length || 0,
+        total: searchResults.total,
+        processingTime: searchResults.processing_time
+      })
       
       res.json({
         products: searchResults.products,
@@ -129,23 +82,22 @@ export const GET = async (
       return
       
     } catch (error) {
-      console.error('Error searching products:', error);
-      console.warn('Elasticsearch service not found, using fallback to regular products API')
+      console.error('[Backend Search API] ❌ Elasticsearch error:', error);
+      console.warn('[Backend Search API] ⚠️ Falling back to regular products API')
     }
     
-    // FALLBACK: Use regular Medusa products API
+    console.log('[Backend Search API] 📦 Using fallback: Medusa products API')
     const { ContainerRegistrationKeys } = await import('@medusajs/framework/utils')
     const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
     
-    // Build filters for regular query
     const filters: any = { status: 'published' }
     
-    // Text search simulation (basic)
     if (searchParams.query) {
       filters.title = { $ilike: `%${searchParams.query}%` }
     }
     
-    // Get products using regular Medusa query
+    console.log('[Backend Search API] 🔍 Querying products with filters:', filters)
+    
     const { data: products, metadata } = await query.graph({
       entity: 'product',
       fields: [
@@ -170,7 +122,11 @@ export const GET = async (
       }
     })
     
-    // Keep only variants with stock > 0 and drop products with none
+    console.log('[Backend Search API] 📥 Query result:', {
+      productsCount: products?.length || 0,
+      totalCount: metadata?.count || 0
+    })
+    
     const productsWithStockOnly = (products || [])
       .map((product: any) => {
         const variants = Array.isArray(product.variants) ? product.variants : []
@@ -182,7 +138,11 @@ export const GET = async (
       })
       .filter(Boolean)
 
-    // Calculate prices with promotions for search results
+    console.log('[Backend Search API] 📦 Products with stock:', {
+      before: products?.length || 0,
+      after: productsWithStockOnly.length
+    })
+
     const pricingService = req.scope.resolve(Modules.PRICING)
     
     const productsWithCalculatedPrices = await Promise.all((productsWithStockOnly as any[]).map(async (product: any) => {
@@ -198,12 +158,11 @@ export const GET = async (
           try {
             const calculatedPrices = await pricingService.calculatePrices(
               { id: [basePrice.price_set_id] },
-                             {
-                 context: {
-                   currency_code: basePrice.currency_code || 'IRR'
-                   // region_id and country_code not available in search params
-                 }
-               }
+              {
+                context: {
+                  currency_code: basePrice.currency_code || 'IRR'
+                }
+              }
             )
 
             const calculatedPrice = calculatedPrices?.[0]
@@ -215,8 +174,7 @@ export const GET = async (
                 calculated_amount_with_tax: calculatedPrice.calculated_amount,
                 original_amount: basePrice.amount,
                 original_amount_with_tax: basePrice.amount,
-                                 currency_code: basePrice.currency_code || 'IRR'
-                 // price_list_type not available in CalculatedPriceSet
+                currency_code: basePrice.currency_code || 'IRR'
               } : {
                 calculated_amount: basePrice.amount,
                 calculated_amount_with_tax: basePrice.amount,
@@ -246,7 +204,6 @@ export const GET = async (
       }
     }))
     
-    // Simulate search response format
     const searchResults = {
       products: productsWithCalculatedPrices,
       facets: {
@@ -259,6 +216,13 @@ export const GET = async (
       total: metadata?.count || 0,
       processing_time: 10
     }
+    
+    console.log('[Backend Search API] ✅ Sending fallback response:', {
+      productsCount: searchResults.products.length,
+      total: searchResults.total,
+      page: searchParams.page,
+      totalPages: Math.ceil(searchResults.total / searchParams.limit)
+    })
     
     res.json({
       products: searchResults.products,
@@ -273,10 +237,10 @@ export const GET = async (
     })
     
   } catch (error) {
-    console.error('Search error:', error)
+    console.error('[Backend Search API] ❌ Fatal error:', error)
     res.status(500).json({ 
       error: 'Search failed',
       message: error.message 
     })
   }
-} 
+}

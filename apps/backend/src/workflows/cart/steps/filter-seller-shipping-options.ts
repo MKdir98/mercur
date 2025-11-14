@@ -1,8 +1,5 @@
 import { ShippingOptionDTO } from '@medusajs/framework/types'
-import {
-  ContainerRegistrationKeys,
-  arrayDifference
-} from '@medusajs/framework/utils'
+import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 import { StepResponse, createStep } from '@medusajs/framework/workflows-sdk'
 
 import sellerProduct from '../../../links/seller-product'
@@ -55,29 +52,13 @@ export const filterSellerShippingOptionsStep = createStep(
 
     console.log('🟩 [FILTER_STEP] Existing shipping option IDs:', existingShippingOptions)
 
-    const { data: sellersAlreadyCovered } = await query.graph({
-      entity: sellerShippingOption.entryPoint,
-      fields: ['seller_id'],
-      filters: {
-        shipping_option_id: existingShippingOptions
-      }
-    })
-
-    const uniqueSellersAlreadyCovered = [...new Set(sellersAlreadyCovered.map((s) => s.seller_id))]
-    console.log('🟩 [FILTER_STEP] Sellers already covered:', uniqueSellersAlreadyCovered)
-
-    const sellersToFindShippingOptions = arrayDifference(
-      uniqueSellersInCart,
-      uniqueSellersAlreadyCovered
-    )
-
-    console.log('🟩 [FILTER_STEP] Sellers needing shipping options:', sellersToFindShippingOptions)
+    console.log('🟩 [FILTER_STEP] Getting shipping options for all sellers in cart')
 
     const { data: sellerShippingOptions } = await query.graph({
       entity: sellerShippingOption.entryPoint,
       fields: ['shipping_option_id', 'seller.name', 'seller.id'],
       filters: {
-        seller_id: sellersToFindShippingOptions
+        seller_id: uniqueSellersInCart
       }
     })
 

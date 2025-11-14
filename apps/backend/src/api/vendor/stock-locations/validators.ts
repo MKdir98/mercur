@@ -39,7 +39,11 @@ export const VendorGetStockLocationParams = createFindParams({
  *   city:
  *     type: string
  *     nullable: true
- *     description: City
+ *     description: City name (for display)
+ *   city_id:
+ *     type: string
+ *     nullable: true
+ *     description: City ID (reference to city table) - primary identifier
  *   country_code:
  *     type: string
  *     description: Country code
@@ -54,7 +58,7 @@ export const VendorGetStockLocationParams = createFindParams({
  *   province:
  *     type: string
  *     nullable: true
- *     description: Province
+ *     description: Province name (for display)
  *   latitude:
  *     type: number
  *     nullable: true
@@ -69,6 +73,7 @@ export const UpsertStockLocationAddress = z.object({
   address_2: z.string().nullish(),
   company: z.string().nullish(),
   city: z.string().nullish(),
+  city_id: z.string().nullish(),
   country_code: z.string(),
   phone: z.string().nullish(),
       postal_code: z.string().nullish().refine(

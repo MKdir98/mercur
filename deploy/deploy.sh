@@ -20,24 +20,56 @@ NC='\033[0m'
 # Configuration Loading
 ###############################################################################
 
+# Global flags
+FORCE_REBUILD=false
+WITH_SSL=false
+SKIP_SERVICES_CHECK=false
+
 # Check arguments
 if [ "$#" -lt 1 ]; then
-    echo "Usage: sudo bash $0 <CONFIG_FILE> [COMMAND]"
+    echo "Usage: sudo bash $0 <CONFIG_FILE> [COMMAND] [OPTIONS]"
     echo ""
     echo "Arguments:"
     echo "  CONFIG_FILE   Path to .properties configuration file"
     echo "  COMMAND       Optional command (update, deploy, ssl)"
     echo ""
+    echo "Options:"
+    echo "  --with-ssl           Automatically setup SSL after deployment"
+    echo "  --force-rebuild      Force rebuild all projects even if no changes"
+    echo "  --skip-services      Skip Redis/Elasticsearch checks (for dev/testing)"
+    echo ""
     echo "Examples:"
     echo "  sudo bash $0 demo.properties deploy"
-    echo "  sudo bash $0 production.properties update"
-    echo "  sudo bash $0 demo.properties ssl"
+    echo "  sudo bash $0 production.properties deploy --with-ssl"
+    echo "  sudo bash $0 production.properties update --force-rebuild"
+    echo "  sudo bash $0 demo.properties deploy --skip-services"
     echo ""
     exit 1
 fi
 
 CONFIG_FILE="$1"
 COMMAND="${2:-deploy}"
+
+# Parse optional flags
+shift 2 2>/dev/null || shift 1
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --with-ssl)
+            WITH_SSL=true
+            ;;
+        --force-rebuild)
+            FORCE_REBUILD=true
+            ;;
+        --skip-services)
+            SKIP_SERVICES_CHECK=true
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+    shift
+done
 
 # Load properties file
 load_properties() {
@@ -302,6 +334,12 @@ setup_database() {
 ###############################################################################
 
 check_required_services() {
+    # Skip if flag is set
+    if [ "$SKIP_SERVICES_CHECK" = true ]; then
+        print_warning "Skipping services check (--skip-services flag set)"
+        return 0
+    fi
+    
     print_step "Checking required services..."
     
     local services_ok=true
@@ -455,13 +493,26 @@ clone_or_update_project() {
         print_info "Updating $project_name..."
         cd "$project_path"
         
+        # Get current commit hash
+        local old_hash=$(git rev-parse HEAD 2>/dev/null || echo "")
+        
         # Stash any local changes
         git stash save "Auto-stash before pull at $(date)" 2>/dev/null || true
         
         # Pull latest changes
         git pull origin main || git pull origin master
         
-        print_success "$project_name updated"
+        # Get new commit hash
+        local new_hash=$(git rev-parse HEAD 2>/dev/null || echo "")
+        
+        # Store whether changes occurred (global variable for build decisions)
+        if [ "$old_hash" = "$new_hash" ]; then
+            eval "${repo_name//-/_}_HAS_CHANGES=false"
+            print_success "$project_name is up to date (no changes)"
+        else
+            eval "${repo_name//-/_}_HAS_CHANGES=true"
+            print_success "$project_name updated ($(git log --oneline $old_hash..$new_hash 2>/dev/null | wc -l) new commits)"
+        fi
     else
         print_info "Cloning $project_name..."
         mkdir -p "$DEPLOY_DIR"
@@ -486,6 +537,9 @@ clone_or_update_project() {
             }
             print_success "$project_name cloned"
         fi
+        
+        # New clone always needs build
+        eval "${repo_name//-/_}_HAS_CHANGES=true"
     fi
 }
 
@@ -610,62 +664,180 @@ EOF
     fi
 }
 
+# Helper function to build a single project
+build_backend() {
+    local log_file="/tmp/build_backend_$$.log"
+    {
+        cd "$DEPLOY_DIR/$BACKEND_REPO"
+        
+        # Setup cache directory
+        local YARN_CACHE_DIR="$DEPLOY_DIR/.cache/yarn"
+        mkdir -p "$YARN_CACHE_DIR"
+        
+        # Increase Node.js memory for build (8GB heap)
+        export NODE_OPTIONS="--max-old-space-size=8192"
+        
+        yarn install --frozen-lockfile --cache-folder "$YARN_CACHE_DIR" 2>&1 || yarn install --cache-folder "$YARN_CACHE_DIR" 2>&1
+        cd apps/backend
+        yarn build 2>&1
+        
+        # Reset NODE_OPTIONS
+        unset NODE_OPTIONS
+        
+        echo "BACKEND_BUILD_SUCCESS" >> "$log_file"
+    } > "$log_file" 2>&1
+    
+    if grep -q "BACKEND_BUILD_SUCCESS" "$log_file"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+build_storefront() {
+    local log_file="/tmp/build_storefront_$$.log"
+    {
+        cd "$DEPLOY_DIR/$STOREFRONT_REPO"
+        
+        # Copy .env.production to .env.local for build
+        cp .env.production .env.local 2>&1
+        
+        # Setup cache directory
+        local NPM_CACHE_DIR="$DEPLOY_DIR/.cache/npm"
+        mkdir -p "$NPM_CACHE_DIR"
+        
+        # Increase Node.js memory for build (4GB heap)
+        export NODE_OPTIONS="--max-old-space-size=4096"
+        
+        npm ci --cache "$NPM_CACHE_DIR" 2>&1 || npm install --cache "$NPM_CACHE_DIR" 2>&1
+        NODE_ENV=production npm run build 2>&1
+        
+        # Reset NODE_OPTIONS
+        unset NODE_OPTIONS
+        
+        echo "STOREFRONT_BUILD_SUCCESS" >> "$log_file"
+    } > "$log_file" 2>&1
+    
+    if grep -q "STOREFRONT_BUILD_SUCCESS" "$log_file"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+build_vendor_panel() {
+    local log_file="/tmp/build_vendor_$$.log"
+    {
+        cd "$DEPLOY_DIR/$VENDOR_REPO"
+        
+        # Copy .env.production to .env for build
+        cp .env.production .env 2>&1
+        
+        # Setup cache directory
+        local NPM_CACHE_DIR="$DEPLOY_DIR/.cache/npm"
+        mkdir -p "$NPM_CACHE_DIR"
+        
+        # Increase Node.js memory for build (2GB heap)
+        export NODE_OPTIONS="--max-old-space-size=2048"
+        
+        npm ci --cache "$NPM_CACHE_DIR" 2>&1 || npm install --cache "$NPM_CACHE_DIR" 2>&1
+        npm run build:preview 2>&1
+        
+        # Reset NODE_OPTIONS
+        unset NODE_OPTIONS
+        
+        echo "VENDOR_BUILD_SUCCESS" >> "$log_file"
+    } > "$log_file" 2>&1
+    
+    if grep -q "VENDOR_BUILD_SUCCESS" "$log_file"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 build_projects() {
     print_step "Building projects..."
     
-    # Build Backend (using Yarn)
-    print_info "Building Backend ($BACKEND_REPO) with Yarn..."
-    cd "$DEPLOY_DIR/$BACKEND_REPO"
+    # Check if we should skip builds based on git changes
+    local backend_needs_build=true
+    local storefront_needs_build=true
+    local vendor_needs_build=true
     
-    # Increase Node.js memory for build (8GB heap)
-    export NODE_OPTIONS="--max-old-space-size=8192"
+    if [ "$FORCE_REBUILD" = false ]; then
+        # Check each project's change status
+        eval "backend_needs_build=\${${BACKEND_REPO//-/_}_HAS_CHANGES:-true}"
+        eval "storefront_needs_build=\${${STOREFRONT_REPO//-/_}_HAS_CHANGES:-true}"
+        eval "vendor_needs_build=\${${VENDOR_REPO//-/_}_HAS_CHANGES:-true}"
+    fi
     
-    yarn install --frozen-lockfile 2>/dev/null || yarn install
-    cd apps/backend
-    yarn build
-    print_success "Backend built"
+    # Create cache directories
+    mkdir -p "$DEPLOY_DIR/.cache/yarn"
+    mkdir -p "$DEPLOY_DIR/.cache/npm"
     
-    # Reset NODE_OPTIONS
-    unset NODE_OPTIONS
+    local build_pids=()
+    local build_names=()
     
-    # Run migrations
-    print_info "Running database migrations..."
-    yarn db:migrate
-    print_success "Migrations completed"
+    # Start parallel builds for projects that need it
+    if [ "$backend_needs_build" = true ]; then
+        print_info "Building Backend ($BACKEND_REPO) with Yarn..."
+        build_backend &
+        build_pids+=($!)
+        build_names+=("Backend")
+    else
+        print_info "Skipping Backend build (no changes detected, use --force-rebuild to override)"
+    fi
     
-    # Build Storefront (using npm)
-    print_info "Building Storefront ($STOREFRONT_REPO) with npm..."
-    cd "$DEPLOY_DIR/$STOREFRONT_REPO"
+    if [ "$storefront_needs_build" = true ]; then
+        print_info "Building Storefront ($STOREFRONT_REPO) with npm..."
+        build_storefront &
+        build_pids+=($!)
+        build_names+=("Storefront")
+    else
+        print_info "Skipping Storefront build (no changes detected, use --force-rebuild to override)"
+    fi
     
-    # Copy .env.production to .env.local for build
-    cp .env.production .env.local
+    if [ "$vendor_needs_build" = true ]; then
+        print_info "Building Vendor Panel ($VENDOR_REPO) with npm..."
+        build_vendor_panel &
+        build_pids+=($!)
+        build_names+=("Vendor Panel")
+    else
+        print_info "Skipping Vendor Panel build (no changes detected, use --force-rebuild to override)"
+    fi
     
-    # Increase Node.js memory for build (4GB heap)
-    export NODE_OPTIONS="--max-old-space-size=4096"
+    # Wait for all builds to complete
+    local build_failed=false
+    for i in "${!build_pids[@]}"; do
+        local pid="${build_pids[$i]}"
+        local name="${build_names[$i]}"
+        
+        if wait "$pid"; then
+            print_success "$name built successfully"
+        else
+            print_error "$name build failed!"
+            cat "/tmp/build_${name// /_}_$$.log" 2>/dev/null || true
+            build_failed=true
+        fi
+    done
     
-    npm ci 2>/dev/null || npm install
-    NODE_ENV=production npm run build
-    print_success "Storefront built"
+    # Clean up log files
+    rm -f /tmp/build_*_$$.log 2>/dev/null || true
     
-    # Reset NODE_OPTIONS
-    unset NODE_OPTIONS
+    if [ "$build_failed" = true ]; then
+        print_error "One or more builds failed. Please check the logs above."
+        exit 1
+    fi
     
-    # Build Vendor Panel (using npm)
-    print_info "Building Vendor Panel ($VENDOR_REPO) with npm..."
-    cd "$DEPLOY_DIR/$VENDOR_REPO"
+    # Run migrations (must be done sequentially after backend build)
+    if [ "$backend_needs_build" = true ]; then
+        print_info "Running database migrations..."
+        cd "$DEPLOY_DIR/$BACKEND_REPO/apps/backend"
+        yarn db:migrate
+        print_success "Migrations completed"
+    fi
     
-    # Copy .env.production to .env for build
-    cp .env.production .env
-    
-    # Increase Node.js memory for build (2GB heap)
-    export NODE_OPTIONS="--max-old-space-size=2048"
-    
-    npm ci 2>/dev/null || npm install
-    npm run build:preview
-    print_success "Vendor Panel built"
-    
-    # Reset NODE_OPTIONS
-    unset NODE_OPTIONS
+    print_success "All builds completed successfully!"
 }
 
 ###############################################################################
@@ -1060,39 +1232,33 @@ setup_ssl_auto() {
     install_certbot
     
     echo ""
-    print_warning "════════════════════════════════════════════════════════"
-    print_warning "IMPORTANT: Before continuing, make sure:"
-    print_warning "  1. DNS A records are pointing to this server's IP"
-    print_warning "  2. Ports 80 and 443 are open"
-    print_warning "  3. Domain names are correct in the config file"
-    print_warning "════════════════════════════════════════════════════════"
+    print_info "════════════════════════════════════════════════════════"
+    print_info "SSL Setup - Make sure DNS is configured before running"
+    print_info "  1. DNS A records pointing to this server's IP"
+    print_info "  2. Ports 80 and 443 are open"
+    print_info "  3. Domain names are correct in the config file"
+    print_info "════════════════════════════════════════════════════════"
     echo ""
-    
-    read -p "Are your DNS records configured correctly? (y/n) " -n 1 -r
-    echo ""
-    
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_warning "Please configure your DNS first, then run:"
-        print_warning "  sudo bash $0 $CONFIG_FILE ssl"
-        return 0
-    fi
     
     # Get SSL for storefront
     print_info "Getting SSL certificate for storefront..."
     certbot --nginx -d $STOREFRONT_DOMAIN -d www.$STOREFRONT_DOMAIN --non-interactive --agree-tos --redirect --email admin@$STOREFRONT_DOMAIN || {
-        print_warning "Failed to get SSL for storefront. You can try manually later."
+        print_warning "Failed to get SSL for storefront. DNS may not be configured yet."
+        print_warning "You can try manually later with: sudo certbot --nginx -d $STOREFRONT_DOMAIN"
     }
     
     # Get SSL for backend
     print_info "Getting SSL certificate for backend..."
     certbot --nginx -d $BACKEND_DOMAIN --non-interactive --agree-tos --redirect --email admin@$STOREFRONT_DOMAIN || {
-        print_warning "Failed to get SSL for backend. You can try manually later."
+        print_warning "Failed to get SSL for backend. DNS may not be configured yet."
+        print_warning "You can try manually later with: sudo certbot --nginx -d $BACKEND_DOMAIN"
     }
     
     # Get SSL for vendor panel
     print_info "Getting SSL certificate for vendor panel..."
     certbot --nginx -d $VENDOR_DOMAIN --non-interactive --agree-tos --redirect --email admin@$STOREFRONT_DOMAIN || {
-        print_warning "Failed to get SSL for vendor panel. You can try manually later."
+        print_warning "Failed to get SSL for vendor panel. DNS may not be configured yet."
+        print_warning "You can try manually later with: sudo certbot --nginx -d $VENDOR_DOMAIN"
     }
     
     # Setup auto-renewal
@@ -1113,7 +1279,12 @@ setup_ssl_auto() {
 update_only() {
     print_banner
     
-    print_info "Starting update process (SSL-safe) for $DEPLOY_MODE..."
+    print_info "Starting fast update process (SSL-safe) for $DEPLOY_MODE..."
+    if [ "$FORCE_REBUILD" = true ]; then
+        print_warning "Force rebuild enabled - all projects will be rebuilt"
+    else
+        print_info "Smart rebuild enabled - only changed projects will be rebuilt"
+    fi
     echo ""
     
     # Check root privileges
@@ -1123,8 +1294,8 @@ update_only() {
     check_required_services
     echo ""
     
-    # Clone or update projects
-    print_step "Updating projects..."
+    # Clone or update projects (with git change detection)
+    print_step "Updating projects from git..."
     clone_or_update_project "Storefront" "$STOREFRONT_REPO"
     clone_or_update_project "Backend" "$BACKEND_REPO"
     clone_or_update_project "Vendor Panel" "$VENDOR_REPO"
@@ -1138,7 +1309,7 @@ update_only() {
         exit 1
     fi
     
-    # Build projects
+    # Build projects (parallel builds with smart rebuild)
     build_projects
     echo ""
     
@@ -1172,6 +1343,9 @@ update_only() {
     echo "  View logs:        pm2 logs"
     echo "  View status:      pm2 status"
     echo "  Monitor:          pm2 monit"
+    echo ""
+    print_info "Next update with force rebuild:"
+    echo "  sudo bash $0 $CONFIG_FILE update --force-rebuild"
     echo ""
 }
 
@@ -1272,25 +1446,18 @@ deploy() {
     echo "  Setup SSL:              sudo bash $0 $CONFIG_FILE ssl"
     echo ""
     
-    # Prompt for SSL setup
-    echo ""
-    print_info "═══════════════════════════════════════════════════════════"
-    print_info "SSL/HTTPS Setup"
-    print_info "═══════════════════════════════════════════════════════════"
-    echo ""
-    print_warning "To secure your site with HTTPS, you need SSL certificates."
-    echo ""
-    read -p "Do you want to setup SSL/HTTPS now? (y/n) " -n 1 -r
-    echo ""
-    
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Setup SSL if flag is set
+    if [ "$WITH_SSL" = true ]; then
         echo ""
+        print_info "Setting up SSL (--with-ssl flag detected)..."
         setup_ssl_auto
     else
         echo ""
-        print_info "You can setup SSL later by running:"
+        print_info "To enable HTTPS/SSL, run:"
         echo ""
         echo "  sudo bash $0 $CONFIG_FILE ssl"
+        echo "  OR"
+        echo "  sudo bash $0 $CONFIG_FILE deploy --with-ssl"
         echo ""
         print_warning "Note: Make sure DNS records point to this server first!"
     fi
@@ -1315,16 +1482,22 @@ case "$COMMAND" in
         ;;
     *)
         print_banner
-        echo "Usage: sudo bash $0 <CONFIG_FILE> [COMMAND]"
+        echo "Usage: sudo bash $0 <CONFIG_FILE> [COMMAND] [OPTIONS]"
         echo ""
         echo "Commands:"
-        echo "  deploy        Full deployment (prompts for SSL setup)"
+        echo "  deploy        Full deployment (install, build, configure)"
         echo "  update        Update code & rebuild (SSL-safe, preserves Nginx config)"
-        echo "  ssl           Setup SSL/HTTPS (run separately if needed)"
+        echo "  ssl           Setup SSL/HTTPS certificates"
+        echo ""
+        echo "Options:"
+        echo "  --with-ssl           Automatically setup SSL after deployment"
+        echo "  --force-rebuild      Force rebuild all projects even if no changes"
+        echo "  --skip-services      Skip Redis/Elasticsearch checks (for dev/testing)"
         echo ""
         echo "Examples:"
         echo "  sudo bash $0 demo.properties deploy"
-        echo "  sudo bash $0 production.properties update"
+        echo "  sudo bash $0 production.properties deploy --with-ssl"
+        echo "  sudo bash $0 production.properties update --force-rebuild"
         echo "  sudo bash $0 demo.properties ssl"
         echo ""
         echo "What this script does:"
@@ -1332,21 +1505,29 @@ case "$COMMAND" in
         echo "  deploy command:"
         echo "    • Install dependencies (Node.js, Nginx, PostgreSQL, Redis, PM2)"
         echo "    • Clone or update all three projects"
-        echo "    • Setup environment files"
-        echo "    • Build all projects"
+        echo "    • Smart rebuild (only changed projects, use --force-rebuild to override)"
+        echo "    • Parallel builds with caching for faster deployment"
         echo "    • Configure Nginx as reverse proxy"
         echo "    • Start services with PM2"
         echo "    • Configure firewall"
-        echo "    • Prompt for SSL setup"
+        echo "    • Optional: Setup SSL with --with-ssl flag"
         echo ""
-        echo "  update command (SSL-safe):"
+        echo "  update command (SSL-safe, fast):"
         echo "    • Pull latest code from git"
-        echo "    • Build all projects"
+        echo "    • Smart rebuild (only changed projects)"
+        echo "    • Parallel builds with caching"
         echo "    • Restart PM2 services"
         echo "    • Preserves Nginx/SSL configuration"
         echo ""
         echo "  ssl command:"
-        echo "    • Setup SSL certificates (Let's Encrypt)"
+        echo "    • Setup SSL certificates with Let's Encrypt (non-interactive)"
+        echo "    • Auto-renewal configuration"
+        echo ""
+        echo "Performance Features:"
+        echo "  ✓ Parallel builds (Backend, Storefront, Vendor Panel)"
+        echo "  ✓ Smart rebuild (skip unchanged projects)"
+        echo "  ✓ Build caching (npm/yarn)"
+        echo "  ✓ Git change detection"
         echo ""
         exit 1
         ;;

@@ -8,6 +8,7 @@ import {
 
 import { IntermediateEvents } from '@mercurjs/framework'
 
+import { updateStockLocationAddressCityIdWorkflow } from '../../../../workflows/stock-location/workflows'
 import { VendorUpdateStockLocationType } from '../validators'
 
 /**
@@ -62,6 +63,23 @@ export const GET = async (
     },
     { throwIfKeyNotFound: true }
   )
+
+  if (stockLocation.address?.city_id) {
+    try {
+      const { data: [city] } = await query.graph({
+        entity: 'city',
+        fields: ['id', 'name', 'state_id', 'state.id', 'state.name'],
+        filters: { id: stockLocation.address.city_id }
+      })
+      
+      if (city) {
+        stockLocation.address.city_details = city
+        stockLocation.address.state_id = city.state_id
+      }
+    } catch (error) {
+      console.error('Failed to fetch city details:', error)
+    }
+  }
 
   res.status(200).json({
     stock_location: stockLocation
@@ -122,6 +140,15 @@ export const POST = async (
     }
   })
 
+  if (req.validatedBody?.address?.city_id) {
+    await updateStockLocationAddressCityIdWorkflow(req.scope).run({
+      input: {
+        stock_location_id: req.params.id,
+        city_id: req.validatedBody.address.city_id
+      }
+    })
+  }
+
   const eventBus = req.scope.resolve(Modules.EVENT_BUS)
   await eventBus.emit({
     name: IntermediateEvents.STOCK_LOCATION_CHANGED,
@@ -140,6 +167,23 @@ export const POST = async (
     },
     { throwIfKeyNotFound: true }
   )
+
+  if (stockLocation.address?.city_id) {
+    try {
+      const { data: [city] } = await query.graph({
+        entity: 'city',
+        fields: ['id', 'name', 'state_id', 'state.id', 'state.name'],
+        filters: { id: stockLocation.address.city_id }
+      })
+      
+      if (city) {
+        stockLocation.address.city_details = city
+        stockLocation.address.state_id = city.state_id
+      }
+    } catch (error) {
+      console.error('Failed to fetch city details:', error)
+    }
+  }
 
   res.status(200).json({
     stock_location: stockLocation

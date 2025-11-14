@@ -13,5 +13,15 @@ export const vendorCitiesMiddlewares: MiddlewareRoute[] = [
         vendorCitiesQueryConfig.list
       )
     ]
+  },
+  {
+    method: ['GET'],
+    matcher: '/vendor/cities/:id',
+    middlewares: [
+      validateAndTransformQuery(
+        VendorGetCitiesParams,
+        vendorCitiesQueryConfig.retrieve
+      )
+    ]
   }
 ] 

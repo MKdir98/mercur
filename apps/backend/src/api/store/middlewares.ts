@@ -38,6 +38,10 @@ export const storeMiddlewares: MiddlewareRoute[] = [
     middlewares: [bypassAuthInLocalDemo]
   },
   {
+    matcher: '/store/customer/*',
+    middlewares: [bypassAuthInLocalDemo]
+  },
+  {
     matcher: '/store/reviews/*',
     middlewares: [authenticate('customer', ['bearer', 'session'])]
   },

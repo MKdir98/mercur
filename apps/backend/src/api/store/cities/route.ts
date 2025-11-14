@@ -1,22 +1,30 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 
-export async function GET(req: MedusaRequest, res: MedusaResponse) {
-  const query = req.scope.resolve('query')
+const CITY_MODULE = "city"
 
-  const country_code = (req.query.country_code as string) || 'ir'
-  const state_id = req.query.state_id as string | undefined
-
-  const filters: any = { country_code }
-  if (state_id) {
-    filters.state_id = state_id
+export async function GET(
+  req: MedusaRequest,
+  res: MedusaResponse
+): Promise<void> {
+  const stateId = req.query.state_id as string
+  const countryCode = req.query.country_code as string || 'ir'
+  
+  if (!stateId) {
+    res.status(400).json({ error: 'state_id is required' })
+    return
   }
-
-  const { data: cities } = await query.graph({
-    entity: 'city',
-    fields: ['id', 'name', 'state_id'],
-    filters,
-    pagination: { take: 1000 }
-  })
-
-  res.json({ cities })
-} 
+  
+  try {
+    const cityService = req.scope.resolve(CITY_MODULE)
+    
+    const cities = await cityService.listCities({
+      state_id: stateId,
+      country_code: countryCode
+    })
+    
+    res.json({ cities })
+  } catch (error) {
+    console.error('Error fetching cities:', error)
+    res.status(500).json({ error: 'Failed to fetch cities' })
+  }
+}

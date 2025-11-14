@@ -1,18 +1,19 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
+import { VendorGetStatesParamsType } from './validators'
 
 const CITY_MODULE = "city"
 
 export async function GET(
-  req: MedusaRequest,
+  req: MedusaRequest<VendorGetStatesParamsType>,
   res: MedusaResponse
 ): Promise<void> {
-  const countryCode = req.query.country_code as string || 'ir'
+  const { country_code = 'ir' } = req.validatedQuery
   
   try {
     const cityService = req.scope.resolve(CITY_MODULE)
     
     const states = await cityService.listStates({
-      country_code: countryCode
+      country_code
     })
     
     res.json({ states })

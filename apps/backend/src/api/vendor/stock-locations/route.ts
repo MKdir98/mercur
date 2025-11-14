@@ -7,6 +7,7 @@ import { SELLER_MODULE } from '@mercurjs/seller'
 
 import sellerStockLocationLink from '../../../links/seller-stock-location'
 import { fetchSellerByAuthActorId } from '../../../shared/infra/http/utils'
+import { updateStockLocationAddressCityIdWorkflow } from '../../../workflows/stock-location/workflows'
 import { VendorCreateStockLocationType } from './validators'
 
 /**
@@ -66,6 +67,15 @@ export const POST = async (
     }
   })
 
+  if (req.validatedBody?.address?.city_id) {
+    await updateStockLocationAddressCityIdWorkflow(req.scope).run({
+      input: {
+        stock_location_id: result[0].id,
+        city_id: req.validatedBody.address.city_id
+      }
+    })
+  }
+
   const eventBus = req.scope.resolve(Modules.EVENT_BUS)
   await eventBus.emit({
     name: IntermediateEvents.STOCK_LOCATION_CHANGED,
@@ -81,6 +91,23 @@ export const POST = async (
       id: result[0].id
     }
   })
+
+  if (stockLocation.address?.city_id) {
+    try {
+      const { data: [city] } = await query.graph({
+        entity: 'city',
+        fields: ['id', 'name', 'state_id', 'state.id', 'state.name'],
+        filters: { id: stockLocation.address.city_id }
+      })
+      
+      if (city) {
+        stockLocation.address.city_details = city
+        stockLocation.address.state_id = city.state_id
+      }
+    } catch (error) {
+      console.error('Failed to fetch city details:', error)
+    }
+  }
 
   res.status(201).json({
     stock_location: stockLocation
@@ -135,10 +162,33 @@ export const GET = async (
     pagination: req.queryConfig.pagination
   })
 
+  const stockLocations = await Promise.all(
+    sellerLocations.map(async (sellerLocation) => {
+      const location = sellerLocation.stock_location
+      
+      if (location.address?.city_id) {
+        try {
+          const { data: [city] } = await query.graph({
+            entity: 'city',
+            fields: ['id', 'name', 'state_id', 'state.id', 'state.name'],
+            filters: { id: location.address.city_id }
+          })
+          
+          if (city) {
+            location.address.city_details = city
+            location.address.state_id = city.state_id
+          }
+        } catch (error) {
+          console.error('Failed to fetch city details:', error)
+        }
+      }
+      
+      return location
+    })
+  )
+
   res.status(200).json({
-    stock_locations: sellerLocations.map(
-      (sellerLocation) => sellerLocation.stock_location
-    ),
+    stock_locations: stockLocations,
     count: metadata?.count,
     offset: metadata?.skip,
     limit: metadata?.take

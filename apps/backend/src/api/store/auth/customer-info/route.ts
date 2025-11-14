@@ -91,6 +91,7 @@ export async function GET(
         "metadata",
         "created_at",
         "updated_at",
+        "addresses.*",
       ],
       filters: {
         id: customerId,
@@ -118,6 +119,7 @@ export async function GET(
         metadata: customer.metadata,
         created_at: customer.created_at,
         updated_at: customer.updated_at,
+        addresses: customer.addresses || [],
       },
     })
   } catch (error) {

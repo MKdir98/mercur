@@ -5,7 +5,8 @@ export const VendorGetCitiesParams = z
     fields: z.string().optional(),
     offset: z.coerce.number().optional(),
     limit: z.coerce.number().optional(),
-    country_code: z.string().optional()
+    country_code: z.string().optional(),
+    state_id: z.string().optional()
   })
   .strict()
 
