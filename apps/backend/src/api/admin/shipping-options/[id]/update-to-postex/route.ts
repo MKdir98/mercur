@@ -9,11 +9,13 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const fulfillmentModule = req.scope.resolve(Modules.FULFILLMENT)
 
   try {
-    const updatedOption = await fulfillmentModule.updateShippingOptions({
-      id: shippingOptionId,
-      price_type: 'calculated',
-      provider_id: 'postex'
-    })
+    const updatedOption = await fulfillmentModule.updateShippingOptions(
+      shippingOptionId,
+      {
+        price_type: 'calculated',
+        provider_id: 'postex'
+      }
+    )
 
     console.log('✅ [UPDATE_POSTEX] Updated:', updatedOption)
 
@@ -29,6 +31,8 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     })
   }
 }
+
+
 
 
 

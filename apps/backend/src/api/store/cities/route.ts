@@ -15,7 +15,7 @@ export async function GET(
   }
   
   try {
-    const cityService = req.scope.resolve(CITY_MODULE)
+    const cityService = req.scope.resolve(CITY_MODULE) as any
     
     const cities = await cityService.listCities({
       state_id: stateId,

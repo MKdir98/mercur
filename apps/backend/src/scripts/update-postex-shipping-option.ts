@@ -11,11 +11,13 @@ export async function updateShippingOptionToPostex(
   const fulfillmentModule = container.resolve(Modules.FULFILLMENT)
 
   try {
-    const updatedOption = await fulfillmentModule.updateShippingOptions({
-      id: shippingOptionId,
-      price_type: 'calculated',
-      provider_id: 'postex'
-    })
+    const updatedOption = await fulfillmentModule.updateShippingOptions(
+      shippingOptionId,
+      {
+        price_type: 'calculated',
+        provider_id: 'postex'
+      }
+    )
 
     console.log('✅ Updated shipping option:', updatedOption)
     return updatedOption
@@ -25,21 +27,15 @@ export async function updateShippingOptionToPostex(
   }
 }
 
-const run = async () => {
-  const { getContainer } = await import('@medusajs/framework')
-  const container = await getContainer({
-    directory: process.cwd()
-  })
-
-  const shippingOptionId = process.argv[2] || 'so_01K9ETRPKZT05FV7976ZH5ZVWK'
-
-  await updateShippingOptionToPostex(container, shippingOptionId)
-
-  console.log('✅ Done!')
-  process.exit(0)
+if (require.main === module) {
+  console.log('This script should be run via Medusa CLI')
+  console.log('Example: npx medusa exec ./src/scripts/update-postex-shipping-option.ts')
+  process.exit(1)
 }
 
-run()
+export default updateShippingOptionToPostex
+
+
 
 
 

@@ -6,7 +6,7 @@ export async function GET(
   req: MedusaRequest<{ id: string }>,
   res: MedusaResponse
 ): Promise<void> {
-  const cityService = req.scope.resolve(CITY_MODULE)
+  const cityService = req.scope.resolve(CITY_MODULE) as any
   const { id } = req.params
 
   try {

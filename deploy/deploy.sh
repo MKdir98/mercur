@@ -664,30 +664,26 @@ EOF
     fi
 }
 
-# Helper function to build a single project
 build_backend() {
-    local log_file="/tmp/build_backend_$$.log"
+    local BUILD_LOG_FILE="/tmp/build_backend_$$.log"
     {
         cd "$DEPLOY_DIR/$BACKEND_REPO"
         
-        # Setup cache directory
         local YARN_CACHE_DIR="$DEPLOY_DIR/.cache/yarn"
         mkdir -p "$YARN_CACHE_DIR"
         
-        # Increase Node.js memory for build (8GB heap)
         export NODE_OPTIONS="--max-old-space-size=8192"
         
         yarn install --frozen-lockfile --cache-folder "$YARN_CACHE_DIR" 2>&1 || yarn install --cache-folder "$YARN_CACHE_DIR" 2>&1
         cd apps/backend
         yarn build 2>&1
         
-        # Reset NODE_OPTIONS
         unset NODE_OPTIONS
         
-        echo "BACKEND_BUILD_SUCCESS" >> "$log_file"
-    } > "$log_file" 2>&1
+        echo "BACKEND_BUILD_SUCCESS" >> "$BUILD_LOG_FILE"
+    } > "$BUILD_LOG_FILE" 2>&1
     
-    if grep -q "BACKEND_BUILD_SUCCESS" "$log_file"; then
+    if grep -q "BACKEND_BUILD_SUCCESS" "$BUILD_LOG_FILE"; then
         return 0
     else
         return 1
@@ -695,30 +691,26 @@ build_backend() {
 }
 
 build_storefront() {
-    local log_file="/tmp/build_storefront_$$.log"
+    local BUILD_LOG_FILE="/tmp/build_storefront_$$.log"
     {
         cd "$DEPLOY_DIR/$STOREFRONT_REPO"
         
-        # Copy .env.production to .env.local for build
         cp .env.production .env.local 2>&1
         
-        # Setup cache directory
         local NPM_CACHE_DIR="$DEPLOY_DIR/.cache/npm"
         mkdir -p "$NPM_CACHE_DIR"
         
-        # Increase Node.js memory for build (4GB heap)
         export NODE_OPTIONS="--max-old-space-size=4096"
         
         npm ci --cache "$NPM_CACHE_DIR" 2>&1 || npm install --cache "$NPM_CACHE_DIR" 2>&1
         NODE_ENV=production npm run build 2>&1
         
-        # Reset NODE_OPTIONS
         unset NODE_OPTIONS
         
-        echo "STOREFRONT_BUILD_SUCCESS" >> "$log_file"
-    } > "$log_file" 2>&1
+        echo "STOREFRONT_BUILD_SUCCESS" >> "$BUILD_LOG_FILE"
+    } > "$BUILD_LOG_FILE" 2>&1
     
-    if grep -q "STOREFRONT_BUILD_SUCCESS" "$log_file"; then
+    if grep -q "STOREFRONT_BUILD_SUCCESS" "$BUILD_LOG_FILE"; then
         return 0
     else
         return 1
@@ -726,30 +718,26 @@ build_storefront() {
 }
 
 build_vendor_panel() {
-    local log_file="/tmp/build_vendor_$$.log"
+    local BUILD_LOG_FILE="/tmp/build_vendor_$$.log"
     {
         cd "$DEPLOY_DIR/$VENDOR_REPO"
         
-        # Copy .env.production to .env for build
         cp .env.production .env 2>&1
         
-        # Setup cache directory
         local NPM_CACHE_DIR="$DEPLOY_DIR/.cache/npm"
         mkdir -p "$NPM_CACHE_DIR"
         
-        # Increase Node.js memory for build (2GB heap)
         export NODE_OPTIONS="--max-old-space-size=2048"
         
         npm ci --cache "$NPM_CACHE_DIR" 2>&1 || npm install --cache "$NPM_CACHE_DIR" 2>&1
         npm run build:preview 2>&1
         
-        # Reset NODE_OPTIONS
         unset NODE_OPTIONS
         
-        echo "VENDOR_BUILD_SUCCESS" >> "$log_file"
-    } > "$log_file" 2>&1
+        echo "VENDOR_BUILD_SUCCESS" >> "$BUILD_LOG_FILE"
+    } > "$BUILD_LOG_FILE" 2>&1
     
-    if grep -q "VENDOR_BUILD_SUCCESS" "$log_file"; then
+    if grep -q "VENDOR_BUILD_SUCCESS" "$BUILD_LOG_FILE"; then
         return 0
     else
         return 1
@@ -759,31 +747,29 @@ build_vendor_panel() {
 build_projects() {
     print_step "Building projects..."
     
-    # Check if we should skip builds based on git changes
     local backend_needs_build=true
     local storefront_needs_build=true
     local vendor_needs_build=true
     
     if [ "$FORCE_REBUILD" = false ]; then
-        # Check each project's change status
         eval "backend_needs_build=\${${BACKEND_REPO//-/_}_HAS_CHANGES:-true}"
         eval "storefront_needs_build=\${${STOREFRONT_REPO//-/_}_HAS_CHANGES:-true}"
         eval "vendor_needs_build=\${${VENDOR_REPO//-/_}_HAS_CHANGES:-true}"
     fi
     
-    # Create cache directories
     mkdir -p "$DEPLOY_DIR/.cache/yarn"
     mkdir -p "$DEPLOY_DIR/.cache/npm"
     
     local build_pids=()
     local build_names=()
+    local build_log_files=()
     
-    # Start parallel builds for projects that need it
     if [ "$backend_needs_build" = true ]; then
         print_info "Building Backend ($BACKEND_REPO) with Yarn..."
         build_backend &
         build_pids+=($!)
         build_names+=("Backend")
+        build_log_files+=("/tmp/build_backend_$$.log")
     else
         print_info "Skipping Backend build (no changes detected, use --force-rebuild to override)"
     fi
@@ -793,6 +779,7 @@ build_projects() {
         build_storefront &
         build_pids+=($!)
         build_names+=("Storefront")
+        build_log_files+=("/tmp/build_storefront_$$.log")
     else
         print_info "Skipping Storefront build (no changes detected, use --force-rebuild to override)"
     fi
@@ -802,26 +789,35 @@ build_projects() {
         build_vendor_panel &
         build_pids+=($!)
         build_names+=("Vendor Panel")
+        build_log_files+=("/tmp/build_vendor_$$.log")
     else
         print_info "Skipping Vendor Panel build (no changes detected, use --force-rebuild to override)"
     fi
     
-    # Wait for all builds to complete
     local build_failed=false
     for i in "${!build_pids[@]}"; do
         local pid="${build_pids[$i]}"
         local name="${build_names[$i]}"
+        local log_file="${build_log_files[$i]}"
         
         if wait "$pid"; then
             print_success "$name built successfully"
         else
             print_error "$name build failed!"
-            cat "/tmp/build_${name// /_}_$$.log" 2>/dev/null || true
+            echo ""
+            print_error "════════════════════════════════════════════════════════"
+            print_error "Build log for $name:"
+            print_error "════════════════════════════════════════════════════════"
+            if [ -f "$log_file" ]; then
+                tail -100 "$log_file"
+            else
+                print_error "Log file not found: $log_file"
+            fi
+            echo ""
             build_failed=true
         fi
     done
     
-    # Clean up log files
     rm -f /tmp/build_*_$$.log 2>/dev/null || true
     
     if [ "$build_failed" = true ]; then
@@ -829,7 +825,6 @@ build_projects() {
         exit 1
     fi
     
-    # Run migrations (must be done sequentially after backend build)
     if [ "$backend_needs_build" = true ]; then
         print_info "Running database migrations..."
         cd "$DEPLOY_DIR/$BACKEND_REPO/apps/backend"

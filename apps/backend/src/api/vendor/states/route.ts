@@ -10,7 +10,7 @@ export async function GET(
   const { country_code = 'ir' } = req.validatedQuery
   
   try {
-    const cityService = req.scope.resolve(CITY_MODULE)
+    const cityService = req.scope.resolve(CITY_MODULE) as any
     
     const states = await cityService.listStates({
       country_code
