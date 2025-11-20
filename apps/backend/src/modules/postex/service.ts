@@ -154,16 +154,6 @@ class PostexService extends AbstractFulfillmentProviderService {
             height = height || product[0].height
           }
         }
-        
-        const DEFAULT_WEIGHT = 0.5
-        const DEFAULT_LENGTH = 20
-        const DEFAULT_WIDTH = 15
-        const DEFAULT_HEIGHT = 10
-        
-        weight = weight || DEFAULT_WEIGHT
-        length = length || DEFAULT_LENGTH
-        width = width || DEFAULT_WIDTH
-        height = height || DEFAULT_HEIGHT
 
         const unitPrice = variant?.calculated_price?.calculated_amount || item.unit_price || 0
         const quantity = item.quantity || 1
@@ -191,6 +181,12 @@ class PostexService extends AbstractFulfillmentProviderService {
 
       // 7. Return calculated price
       if (result && result.price) {
+        console.log('✅ [POSTEX SUCCESS] Shipping price calculated:', {
+          price: result.price,
+          originCity: originCityCode,
+          destinationCity: destinationCityCode,
+          parcelsCount: parcels.length
+        })
         return {
           calculated_amount: result.price,
           is_calculated: true,
@@ -201,6 +197,11 @@ class PostexService extends AbstractFulfillmentProviderService {
       throw new Error('خطا در استعلام هزینه ارسال: پستکس قیمتی برنگرداند')
 
     } catch (error) {
+      console.error('❌ [POSTEX ERROR]', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      })
       // Re-throw with Persian message if it's already a user-facing error
       if (error.message && error.message.includes('خطا در استعلام')) {
         throw error
