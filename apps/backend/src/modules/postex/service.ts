@@ -175,15 +175,21 @@ class PostexService extends AbstractFulfillmentProviderService {
 
       const parcels = cart.items.map((item, index) => {
         const variant = item.variant
+        const product = item.product
+        
+        const weight = variant?.weight || product?.weight || 0
+        const length = variant?.length || product?.length || 0
+        const width = variant?.width || product?.width || 0
+        const height = variant?.height || product?.height || 0
         
         const missingFields: string[] = []
-        if (!variant?.weight || variant.weight <= 0) missingFields.push('وزن')
-        if (!variant?.length || variant.length <= 0) missingFields.push('طول')
-        if (!variant?.width || variant.width <= 0) missingFields.push('عرض')
-        if (!variant?.height || variant.height <= 0) missingFields.push('ارتفاع')
+        if (!weight || weight <= 0) missingFields.push('وزن')
+        if (!length || length <= 0) missingFields.push('طول')
+        if (!width || width <= 0) missingFields.push('عرض')
+        if (!height || height <= 0) missingFields.push('ارتفاع')
         
         if (missingFields.length > 0) {
-          const productTitle = item?.title || variant?.title || `محصول ${index + 1}`
+          const productTitle = item?.title || variant?.title || product?.title || `محصول ${index + 1}`
           throw new Error(
             `خطا در استعلام هزینه ارسال: مشخصات محصول "${productTitle}" ناقص است. فیلدهای مورد نیاز: ${missingFields.join('، ')}`
           )
@@ -194,10 +200,10 @@ class PostexService extends AbstractFulfillmentProviderService {
         const totalValue = unitPrice * quantity
 
         return {
-          weight_kg: variant.weight,
-          length_cm: variant.length,
-          width_cm: variant.width,
-          height_cm: variant.height,
+          weight_kg: weight,
+          length_cm: length,
+          width_cm: width,
+          height_cm: height,
           total_value: totalValue
         }
       })
