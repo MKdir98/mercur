@@ -41,6 +41,23 @@ export const storeMiddlewares: MiddlewareRoute[] = [
     matcher: '/store/customer/*',
     middlewares: [bypassAuthInLocalDemo]
   },
+  // Public endpoints - بدون نیاز به authentication
+  {
+    matcher: '/store/brands',
+    middlewares: [bypassAuthInLocalDemo]
+  },
+  {
+    matcher: '/store/popular-products',
+    middlewares: [bypassAuthInLocalDemo]
+  },
+  {
+    matcher: '/store/featured-sellers',
+    middlewares: [bypassAuthInLocalDemo]
+  },
+  {
+    matcher: '/store/rich-products',
+    middlewares: [bypassAuthInLocalDemo]
+  },
   {
     matcher: '/store/reviews/*',
     middlewares: [authenticate('customer', ['bearer', 'session'])]
