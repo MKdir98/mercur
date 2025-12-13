@@ -69,6 +69,55 @@ interface ShippingQuoteResponse {
   message?: string
 }
 
+interface BulkParcelRequest {
+  sender: {
+    name: string
+    mobile: string
+    address: string
+    city_code: number
+    postal_code: string
+  }
+  collection_type: string
+  parcels: Array<{
+    receiver: {
+      name: string
+      mobile: string
+      address: string
+      city_code: number
+      postal_code: string
+    }
+    payment_type: string
+    parcel_properties: {
+      length: number
+      width: number
+      height: number
+      total_weight: number
+      is_fragile?: boolean
+      is_liquid?: boolean
+      total_value?: number
+      pre_paid_amount?: number
+      total_value_currency?: string
+      box_type_id?: number
+    }
+  }>
+}
+
+interface BulkParcelResponse {
+  success?: boolean
+  message?: string
+  data?: {
+    parcels?: Array<{
+      tracking_code?: string
+      parcel_id?: string
+      custom_parcel_id?: string
+      receiver_name?: string
+      receiver_mobile?: string
+      status?: string
+      error?: string
+    }>
+  }
+}
+
 export class PostexClient {
   private client: AxiosInstance
   private options: PostexOptions
@@ -182,6 +231,124 @@ export class PostexClient {
 
     } catch (error) {
       console.error('❌ [POSTEX CLIENT] Error calling API')
+      console.error('❌ [POSTEX CLIENT] Status:', error.response?.status)
+      console.error('❌ [POSTEX CLIENT] Message:', error.response?.data?.message)
+      
+      if (error.response?.data?.invalid_fields) {
+        console.error('❌ [POSTEX CLIENT] Invalid fields:')
+        console.error(JSON.stringify(error.response.data.invalid_fields, null, 2))
+      }
+      
+      if (error.response?.data) {
+        console.error('❌ [POSTEX CLIENT] Full response data:')
+        console.error(JSON.stringify(error.response.data, null, 2))
+      }
+      
+      throw error
+    }
+  }
+
+  async createBulkParcels(params: {
+    sender: {
+      name: string
+      phone: string
+      address: string
+      city_code: number
+      postal_code: string
+    }
+    receiver: {
+      name: string
+      phone: string
+      address: string
+      city_code: number
+      postal_code: string
+    }
+    parcels: Array<{
+      weight_kg: number
+      length_cm: number
+      width_cm: number
+      height_cm: number
+      total_value: number
+    }>
+    collection_type?: string
+  }): Promise<{
+    tracking_code: string
+    parcel_id: string
+  } | null> {
+    try {
+      if (!this.options.apiKey) {
+        console.warn('⚠️  [POSTEX CLIENT] No API key provided')
+        throw new Error('API key is required')
+      }
+
+      const requestBody: BulkParcelRequest = {
+        sender: {
+          name: params.sender.name,
+          mobile: params.sender.phone,
+          address: params.sender.address,
+          city_code: params.sender.city_code,
+          postal_code: params.sender.postal_code
+        },
+        collection_type: params.collection_type || 'pick_up',
+        parcels: params.parcels.map(parcel => ({
+          receiver: {
+            name: params.receiver.name,
+            mobile: params.receiver.phone,
+            address: params.receiver.address,
+            city_code: params.receiver.city_code,
+            postal_code: params.receiver.postal_code
+          },
+          payment_type: 'SENDER',
+          parcel_properties: {
+            length: Math.round(parcel.length_cm),
+            width: Math.round(parcel.width_cm),
+            height: Math.round(parcel.height_cm),
+            total_weight: Math.round(parcel.weight_kg * 1000),
+            is_fragile: false,
+            is_liquid: false,
+            total_value: parcel.total_value,
+            pre_paid_amount: 0,
+            total_value_currency: 'IRR',
+            box_type_id: 1
+          }
+        }))
+      }
+
+      console.log('🔹 [POSTEX CLIENT] Creating bulk parcels')
+      console.log('🔹 [POSTEX CLIENT] Request:', JSON.stringify(requestBody, null, 2))
+
+      const response = await this.client.post<BulkParcelResponse>(
+        '/api/v1/parcels/bulk',
+        requestBody
+      )
+
+      console.log('🔹 [POSTEX CLIENT] Response:', JSON.stringify(response.data, null, 2))
+
+      if (response.data?.success && response.data?.data?.parcels?.[0]) {
+        const parcel = response.data.data.parcels[0]
+        
+        if (parcel.error) {
+          console.error('❌ [POSTEX CLIENT] Parcel creation error:', parcel.error)
+          throw new Error(`Postex parcel error: ${parcel.error}`)
+        }
+
+        if (parcel.tracking_code && parcel.parcel_id) {
+          console.log('✅ [POSTEX CLIENT] Parcel created successfully:', {
+            tracking_code: parcel.tracking_code,
+            parcel_id: parcel.parcel_id
+          })
+          return {
+            tracking_code: parcel.tracking_code,
+            parcel_id: parcel.parcel_id
+          }
+        }
+      }
+
+      console.warn('⚠️  [POSTEX CLIENT] No tracking code in response')
+      throw new Error('Postex did not return tracking information')
+
+    } catch (error) {
+      console.error('❌ [POSTEX CLIENT] Error creating bulk parcels')
       console.error('❌ [POSTEX CLIENT] Status:', error.response?.status)
       console.error('❌ [POSTEX CLIENT] Message:', error.response?.data?.message)
       

@@ -31,6 +31,15 @@ module.exports = defineConfig({
     { resolve: '@mercurjs/requests' },
     { resolve: '@mercurjs/brand' },
     { resolve: '@mercurjs/wishlist' },
+    { resolve: '@mercurjs/wallet' },
+    { resolve: '@mercurjs/auction' },
+    {
+      resolve: '@mercurjs/zarinpal',
+      options: {
+        merchantId: process.env.ZARINPAL_MERCHANT_ID,
+        sandbox: process.env.ZARINPAL_SANDBOX === 'true',
+      },
+    },
     { resolve: '@mercurjs/split-order-payment' },
     { resolve: '@mercurjs/attribute' },
     { resolve: '@mercurjs/city' },
