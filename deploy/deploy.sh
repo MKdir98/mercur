@@ -677,7 +677,6 @@ build_backend() {
         export NODE_OPTIONS="--max-old-space-size=8192"
         
         yarn install --frozen-lockfile --cache-folder "$YARN_CACHE_DIR" 2>&1 || yarn install --cache-folder "$YARN_CACHE_DIR" 2>&1
-        cd apps/backend
         yarn build 2>&1
         
         unset NODE_OPTIONS
