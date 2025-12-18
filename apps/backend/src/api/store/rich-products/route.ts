@@ -37,7 +37,7 @@ export const GET = async (
     
     // Add category filter if provided
     if (category_id) {
-      filters['category_id'] = category_id
+      filters['categories'] = { id: category_id }
     }
     
     // Add collection filter if provided
@@ -79,7 +79,8 @@ export const GET = async (
         'variants.*',
         'variants.inventory_items.inventory.location_levels.stocked_quantity',
         'variants.inventory_items.inventory.location_levels.reserved_quantity',
-        'variants.prices.*'
+        'variants.prices.*',
+        'categories.*'
       ],
       filters,
       pagination: {

@@ -40,6 +40,13 @@ module.exports = defineConfig({
         sandbox: process.env.ZARINPAL_SANDBOX === 'true',
       },
     },
+    {
+      resolve: '@mercurjs/sep',
+      options: {
+        terminalId: process.env.SEP_TERMINAL_ID,
+        sandbox: process.env.SEP_SANDBOX === 'true',
+      },
+    },
     { resolve: '@mercurjs/split-order-payment' },
     { resolve: '@mercurjs/attribute' },
     { resolve: '@mercurjs/city' },

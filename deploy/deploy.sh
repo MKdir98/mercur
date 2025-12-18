@@ -674,10 +674,10 @@ build_backend() {
         local YARN_CACHE_DIR="$DEPLOY_DIR/.cache/yarn"
         mkdir -p "$YARN_CACHE_DIR"
         
-        export NODE_OPTIONS="--max-old-space-size=8192"
+        export NODE_OPTIONS="--max-old-space-size=4096"
         
         yarn install --frozen-lockfile --cache-folder "$YARN_CACHE_DIR" 2>&1 || yarn install --cache-folder "$YARN_CACHE_DIR" 2>&1
-        yarn build 2>&1
+        yarn build --concurrency=2 2>&1
         
         unset NODE_OPTIONS
         
