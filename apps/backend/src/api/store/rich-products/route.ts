@@ -12,6 +12,7 @@ const RichProductsQuerySchema = z.object({
   seller_id: z.string().optional(),
   handle: z.string().optional(),
   category_id: z.string().optional(),
+  category_handle: z.string().optional(),
   collection_id: z.string().optional(),
 })
 
@@ -25,7 +26,7 @@ export const GET = async (
 
   try {
     const validatedQuery = RichProductsQuerySchema.parse(req.query)
-    const { limit, offset, sort_by, seller_id, handle, category_id, collection_id } = validatedQuery
+    const { limit, offset, sort_by, seller_id, handle, category_id, category_handle, collection_id } = validatedQuery
 
     // Base filters for products
     const filters: Record<string, any> = { status: 'published' }
@@ -36,8 +37,20 @@ export const GET = async (
     }
     
     // Add category filter if provided
-    if (category_id) {
-      filters['categories'] = { id: category_id }
+    let resolvedCategoryId = category_id
+    if (category_handle && !category_id) {
+      const { data: categories } = await query.graph({
+        entity: 'product_category',
+        fields: ['id', 'handle'],
+        filters: { handle: category_handle }
+      })
+      if (categories && categories.length > 0) {
+        resolvedCategoryId = categories[0].id
+      }
+    }
+    
+    if (resolvedCategoryId) {
+      filters['categories'] = { id: resolvedCategoryId }
     }
     
     // Add collection filter if provided
