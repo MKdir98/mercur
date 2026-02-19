@@ -20,7 +20,7 @@ async function selectPriceSetPrices(
   return price
     ? {
         id: price.id,
-        prices: price.prices.map((p) => ({
+        prices: (price.prices ?? []).filter((p): p is NonNullable<typeof p> => p != null).map((p) => ({
           currency_code: p.currency_code,
           amount: p.amount
         }))
@@ -59,7 +59,7 @@ export const findCommissionRulesStep = createStep(
     const commission_rules: any[] = []
 
     for (const commission of commissions) {
-      const aggregate = {
+      const aggregate: Record<string, unknown> = {
         id: commission.id,
         name: commission.name,
         reference: commission.reference,
@@ -97,7 +97,7 @@ export const findCommissionRulesStep = createStep(
         aggregate.max_price_set = maxPrice.prices
       }
 
-      if (commission.rate.type === 'flat') {
+      if (commission.rate.type === 'flat' && commission.rate.price_set_id) {
         const price = await selectPriceSetPrices(
           container,
           commission.rate.price_set_id
@@ -107,7 +107,7 @@ export const findCommissionRulesStep = createStep(
         aggregate.price_set = price.prices
 
         aggregate.fee_value =
-          price.prices
+          (price.prices ?? []).filter((p): p is NonNullable<typeof p> => p != null)
             .map((p) => `${p.amount}${p.currency_code?.toUpperCase()}`)
             .join('/') || '-'
       }

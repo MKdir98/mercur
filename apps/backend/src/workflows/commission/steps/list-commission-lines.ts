@@ -85,12 +85,12 @@ export const listCommissionLinesStep = createStep(
           items: {
             id: itemIds
           }
-        }
+        } as Record<string, unknown>
       })
 
       const expandedLines = commissionLines.map((line) => {
         const order = orders.find((o) =>
-          o.items.some((i) => i.id === line.item_line_id)
+          (o.items ?? []).some((i) => i?.id === line.item_line_id)
         )
         const rule = rules.find((r) => r.id === line.rule_id)
         return {

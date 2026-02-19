@@ -36,7 +36,7 @@ export const deleteSellerLineItemWorkflow = createWorkflow(
     }).config({ name: 'cart-query' })
 
     const optionIds = transform(carts[0], ({ shipping_methods }) => {
-      return shipping_methods.map((method) => method.shipping_option_id)
+      return (shipping_methods ?? []).map((method) => method?.shipping_option_id).filter((id): id is string => id != null)
     })
 
     const { data: sellerShippingOptions } = useQueryGraphStep({
@@ -48,18 +48,20 @@ export const deleteSellerLineItemWorkflow = createWorkflow(
     const shippingMethodsToRemove = transform(
       { sellerShippingOptions, lineItem: lineItems[0], cart: carts[0] },
       ({ sellerShippingOptions, lineItem, cart }) => {
+        const lineItemProduct = (lineItem as { product?: { seller?: { id: string } } }).product
         const optionIdToRemove = sellerShippingOptions.find(
-          (option) => option.seller_id === lineItem.product.seller.id
+          (option) => option.seller_id === lineItemProduct?.seller?.id
         )?.shipping_option_id
 
-        if (!optionIdToRemove) {
-          return []
-        }
+        if (!optionIdToRemove) return []
 
-        const methodId = cart.shipping_methods.find(
-          (method) => method.shipping_option_id === optionIdToRemove
-        ).id
-
+        const methods = cart.shipping_methods ?? []
+        const foundMethod = methods.find((m) => {
+          const method = m as { shipping_option_id?: string } | null | undefined
+          return method?.shipping_option_id === optionIdToRemove
+        }) as { id: string } | undefined
+        const methodId = foundMethod?.id
+        if (!methodId) return []
         return [methodId]
       }
     )

@@ -85,7 +85,7 @@ export const GET = async (
       id: req.params.id
     }
   })
-  const categoryIds = product.categories.map((category) => category.id)
+  const categoryIds = (product.categories ?? []).filter(Boolean).map((category) => category!.id)
 
   const { data: attributes } = await query.graph({
     entity: categoryAttribute.entryPoint,

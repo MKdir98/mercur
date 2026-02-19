@@ -71,7 +71,7 @@ export const getFormattedOrderSetListWorkflow = createWorkflow(
       pagination: input.pagination
     })
 
-    const formattedOrderSets = transform(data, formatOrderSets)
+    const formattedOrderSets = transform(data, formatOrderSets as any)
 
     return new WorkflowResponse({ data: formattedOrderSets, metadata })
   }

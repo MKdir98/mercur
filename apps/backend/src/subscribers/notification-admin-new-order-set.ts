@@ -21,11 +21,11 @@ export default async function newOrderSetAdminNotifyHandler({
     }
   })
 
-  if (!order_set || order_set.orders.length < 2) {
+  if (!order_set || (order_set.orders ?? []).length < 2) {
     return
   }
 
-  await notificationService.createNotifications({
+  await notificationService.createNotifications([{
     to: '',
     channel: 'feed',
     template: 'admin-ui',
@@ -37,7 +37,7 @@ export default async function newOrderSetAdminNotifyHandler({
       description: 'Someone has placed a new order from multiple sellers 🔔',
       redirect: '/admin/orders'
     }
-  })
+  }])
 }
 
 export const config: SubscriberConfig = {

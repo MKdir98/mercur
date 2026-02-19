@@ -4,6 +4,8 @@ import { PostexClient } from "../../integrations/postex/client"
 class PostexService extends AbstractFulfillmentProviderService {
   static identifier = "postex"
   static LIFE_TIME = "SCOPED"
+
+  static setGlobalContainer(_container: unknown) {}
   
   protected container_: any
   protected options_: any

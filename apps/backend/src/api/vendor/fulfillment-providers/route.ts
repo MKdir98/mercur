@@ -13,7 +13,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       ],
       filters: {
         is_enabled: true
-      }
+      } as Record<string, unknown>
     })
 
     res.json({ 

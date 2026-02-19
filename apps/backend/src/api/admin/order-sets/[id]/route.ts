@@ -48,17 +48,13 @@ import { getFormattedOrderSetListWorkflow } from '../../../../workflows/order-se
  *   - cookie_auth: []
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
-  const {
-    result: {
-      data: [order_set]
-    }
-  } = await getFormattedOrderSetListWorkflow(req.scope).run({
+  const { result } = await getFormattedOrderSetListWorkflow(req.scope).run({
     input: {
       fields: req.queryConfig.fields,
       filters: { id: req.params.id },
       pagination: req.queryConfig.pagination
     }
   })
-
+  const order_set = result.data?.[0]
   res.json({ order_set })
 }

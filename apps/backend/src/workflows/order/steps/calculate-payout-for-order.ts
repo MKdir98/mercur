@@ -23,7 +23,7 @@ export const calculatePayoutForOrderStep = createStep(
       }
     })
 
-    const order_line_items = order.items.map((i) => i.id)
+    const order_line_items = (order.items ?? []).filter(Boolean).map((i) => i!.id)
 
     const { data: commission_lines } = await query.graph({
       entity: 'commission_line',
@@ -37,7 +37,8 @@ export const calculatePayoutForOrderStep = createStep(
       return MathBN.add(acc, current.value)
     }, MathBN.convert(0))
 
-    const orderPayment: SplitOrderPaymentDTO = order.split_order_payment
+    const orderPayment = order.split_order_payment
+    if (!orderPayment) throw new Error('Order has no split order payment')
 
     const captured_amount = MathBN.convert(orderPayment.captured_amount)
     const refunded_amount = MathBN.convert(orderPayment.refunded_amount)

@@ -25,8 +25,10 @@ export default async function buyerAccountCreatedHandler({
     return
   }
 
-  await notificationService.createNotifications({
-    to: customer.email,
+  const email = customer.email ?? ''
+  if (!email) return
+  await notificationService.createNotifications([{
+    to: email,
     channel: 'email',
     template: ResendNotificationTemplates.BUYER_ACCOUNT_CREATED,
     content: {
@@ -37,7 +39,7 @@ export default async function buyerAccountCreatedHandler({
         user_name: customer.first_name || 'Customer'
       }
     }
-  })
+  }])
 }
 
 export const config: SubscriberConfig = {

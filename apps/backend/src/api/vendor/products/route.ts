@@ -163,7 +163,7 @@ export const POST = async (
     {
       entity: 'product',
       fields: req.queryConfig.fields,
-      filters: { id: product_id }
+      filters: { id: product_id as string }
     },
     { throwIfKeyNotFound: true }
   )

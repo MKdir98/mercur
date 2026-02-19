@@ -49,7 +49,7 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
         console.log('📦 [WORKFLOW] Name:', shippingOption.name)
         console.log('📦 [WORKFLOW] Price Type:', shippingOption.price_type)
         console.log('📦 [WORKFLOW] Provider ID:', shippingOption.provider_id)
-        console.log('📦 [WORKFLOW] Prices:', JSON.stringify(shippingOption.prices, null, 2))
+        console.log('📦 [WORKFLOW] Prices:', JSON.stringify((shippingOption as Record<string, unknown>).prices, null, 2))
         return true
       }
     )
@@ -59,13 +59,14 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
       ({ carts: [cart], option }) => ({
         cart_id: cart.id,
         option_ids: [
-          ...cart.shipping_methods.map((method) => method.shipping_option_id),
+          // @ts-ignore excessive stack depth
+          ...(cart.shipping_methods ?? []).filter(Boolean).map((m) => m!.shipping_option_id),
           option.id
         ]
       })
     )
 
-    validateCartShippingOptionsStep(validateCartShippingOptionsInput)
+    validateCartShippingOptionsStep(validateCartShippingOptionsInput as any)
 
     const addShippingMethodToCartInput = transform(
       input,
@@ -103,7 +104,7 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
       { carts, newShippingOption: input.option },
       ({ carts: [cart], newShippingOption }) => {
         return [
-          ...cart.shipping_methods.map((sm) => sm.shipping_option_id),
+          ...(cart.shipping_methods ?? []).filter(Boolean).map((sm) => sm!.shipping_option_id),
           newShippingOption.id
         ]
       }
@@ -132,11 +133,12 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
           CartShippingMethodDTO
         >()
 
-        for (const method of cart.shipping_methods) {
+        for (const method of cart.shipping_methods ?? []) {
+          if (!method) continue
           const sellerId = shippingOptionToSellerMap.get(
             method.shipping_option_id
           )!
-          existingShippingMethodsBySeller.set(sellerId, method)
+          existingShippingMethodsBySeller.set(sellerId, method as any)
         }
 
         const newOptionSellerId = shippingOptionToSellerMap.get(

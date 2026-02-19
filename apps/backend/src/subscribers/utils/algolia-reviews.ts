@@ -21,7 +21,7 @@ export async function findAndTransformAlgoliaReviews(
   })
 
   for (const review of reviews) {
-    review.reference_id = review.seller?.id || review.product?.id
+    (review as Record<string, unknown>).reference_id = review.seller?.id || review.product?.id
   }
 
   return reviews as any[]

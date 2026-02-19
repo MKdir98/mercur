@@ -68,7 +68,7 @@ async function validatePrices(
     }
   })
 
-  const prices = list.prices.map((p) => p.id) as string[]
+  const prices = (list.prices ?? []).map((p) => p?.id).filter((id): id is string => id != null)
 
   for (const price of priceIds) {
     if (!prices.includes(price)) {

@@ -19,8 +19,9 @@ export default async function inventoryItemChangedHandler({
   })
 
   const products = items
-    .flatMap((items) => items.variants)
-    .map((variant) => variant.product_id)
+    .flatMap((items) => items.variants ?? [])
+    .map((variant) => variant?.product_id)
+    .filter((id): id is string => id != null)
 
   await eventBus.emit({
     name: AlgoliaEvents.PRODUCTS_CHANGED,

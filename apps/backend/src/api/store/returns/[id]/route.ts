@@ -19,10 +19,10 @@ export async function GET(
       returns: {
         id: req.params.id
       }
-    }
+    } as Record<string, unknown>
   })
 
   res.json({
-    return: order.returns[0]
+    return: (order as { returns?: Array<unknown> }).returns?.[0]
   })
 }

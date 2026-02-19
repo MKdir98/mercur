@@ -34,20 +34,21 @@ updateOrderReturnRequestWorkflow.hooks.orderReturnRequestUpdated(
       }
     })
 
-    const returns = Array.isArray(order.returns)
-      ? order.returns
-      : [order.returns]
+    const orderReturns = (order as { returns?: unknown }).returns
+    const returns = Array.isArray(orderReturns)
+      ? orderReturns
+      : orderReturns != null ? [orderReturns] : []
 
-    const links = returns.map((r) => {
-      return {
+    const links = returns
+      .filter((r): r is { id: string } => r != null && typeof (r as { id?: unknown }).id === 'string')
+      .map((r) => ({
         [SELLER_MODULE]: {
           seller_id: order_return_request.seller.id
         },
         [Modules.ORDER]: {
           return_id: r.id
         }
-      }
-    })
+      }))
 
     const linkService = container.resolve(ContainerRegistrationKeys.LINK)
     await linkService.create(links)

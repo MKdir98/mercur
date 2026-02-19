@@ -40,17 +40,17 @@ export const processPayoutForOrderWorkflow = createWorkflow(
       options: { throwIfKeyNotFound: true }
     }).config({ name: 'query-order' })
 
-    const order = transform(orders, (orders) => {
+    // @ts-ignore excessive stack depth
+    const order = transform(orders, (orders: any) => {
       const transformed = orders[0]
+      const paymentData = transformed.payment_collections?.[0]?.payment_sessions?.[0]?.data as { latest_charge?: string } | undefined
 
       return {
-        seller_id: transformed.seller.id,
+        seller_id: transformed.seller?.id,
         id: transformed.id,
         total: transformed.total,
         currency_code: transformed.currency_code,
-        source_transaction:
-          transformed.payment_collections[0].payment_sessions[0].data
-            .latest_charge
+        source_transaction: paymentData?.latest_charge ?? ''
       }
     })
 
@@ -64,7 +64,7 @@ export const processPayoutForOrderWorkflow = createWorkflow(
 
     const seller = transform(sellers, (sellers) => sellers[0])
 
-    validateSellerPayoutAccountStep(seller)
+    validateSellerPayoutAccountStep(seller as any)
 
     const payout_total = calculatePayoutForOrderStep(input)
 
@@ -72,8 +72,8 @@ export const processPayoutForOrderWorkflow = createWorkflow(
       transaction_id: order.id,
       amount: payout_total,
       currency_code: order.currency_code,
-      account_id: seller.payout_account.id,
-      source_transaction: order.source_transaction
+      account_id: (seller as { payout_account: { id: string } }).payout_account.id,
+      source_transaction: String(order.source_transaction)
     })
 
     when({ createPayoutErr }, ({ createPayoutErr }) => !createPayoutErr).then(

@@ -21,5 +21,6 @@ export const fetchSellerByAuthActorId = async (
     },
     fields
   })
-  return seller
+  if (!seller) throw new Error('Seller not found')
+  return seller as SellerDTO
 }

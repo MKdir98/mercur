@@ -34,18 +34,21 @@ export default async function buyerCancelOrderHandler({
     return
   }
 
-  await notificationService.createNotifications({
-    to: order.email,
+  const email = order.email ?? ''
+  if (!email) return
+  const orderDisplayId = (order as { display_id?: string }).display_id
+  await notificationService.createNotifications([{
+    to: email,
     channel: 'email',
     template: ResendNotificationTemplates.BUYER_CANCELED_ORDER,
     content: {
-      subject: `Your order #${order.display_id} has been canceled`
+      subject: `Your order #${orderDisplayId ?? order.id} has been canceled`
     },
     data: {
       data: {
         order: {
           id: order.id,
-          display_id: order.display_id,
+          display_id: orderDisplayId,
           item: order.items
         },
         order_address: buildHostAddress(
@@ -54,7 +57,7 @@ export default async function buyerCancelOrderHandler({
         ).toString()
       }
     }
-  })
+  }])
 }
 
 export const config: SubscriberConfig = {

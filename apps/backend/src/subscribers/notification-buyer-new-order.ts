@@ -37,12 +37,15 @@ export default async function orderCreatedHandler({
     return
   }
 
-  await notificationService.createNotifications({
-    to: order.email,
+  const email = order.email ?? ''
+  if (!email) return
+  const orderDisplayId = (order as { display_id?: string }).display_id
+  await notificationService.createNotifications([{
+    to: email,
     channel: 'email',
     template: ResendNotificationTemplates.BUYER_NEW_ORDER,
     content: {
-      subject: `Order Confirmation - #${order.display_id}`
+      subject: `Order Confirmation - #${orderDisplayId ?? order.id}`
     },
     data: {
       data: {
@@ -54,12 +57,12 @@ export default async function orderCreatedHandler({
         ).toString(),
         order: {
           ...order,
-          display_id: order.display_id,
+          display_id: orderDisplayId,
           total: order.summary?.current_order_total || 0
         }
       }
     }
-  })
+  }])
 }
 
 export const config: SubscriberConfig = {
