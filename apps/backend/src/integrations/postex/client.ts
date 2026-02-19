@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios'
+import { PostexParcelDetailResponse } from './types'
 
 interface PostexOptions {
   apiKey?: string
@@ -103,19 +104,35 @@ interface BulkParcelRequest {
 }
 
 interface BulkParcelResponse {
-  success?: boolean
-  message?: string
-  data?: {
-    parcels?: Array<{
-      tracking_code?: string
-      parcel_id?: string
-      custom_parcel_id?: string
-      receiver_name?: string
-      receiver_mobile?: string
-      status?: string
-      error?: string
-    }>
-  }
+  order_no?: number
+  pick_up_price?: number
+  shipping_price?: number
+  total_price?: number
+  result?: Array<{
+    isSuccess: boolean
+    message?: string
+    data?: {
+      sequence_number?: number
+      parcel_no?: number
+      custom_order_no?: string | null
+      custom_reference_no?: string | null
+      is_oversized?: boolean
+      shipments?: Array<{
+        step?: number
+        tracking?: {
+          barcode?: string
+          tracking_number?: string
+          tracking_url?: string
+        }
+        shipping_rate?: {
+          currency?: string
+          amount?: number
+          total_amount?: number
+        }
+      }>
+      order_id?: number
+    }
+  }>
 }
 
 export class PostexClient {
@@ -281,24 +298,60 @@ export class PostexClient {
         throw new Error('API key is required')
       }
 
-      const requestBody: BulkParcelRequest = {
-        sender: {
-          name: params.sender.name,
-          mobile: params.sender.phone,
-          address: params.sender.address,
-          city_code: params.sender.city_code,
-          postal_code: params.sender.postal_code
-        },
-        collection_type: params.collection_type || 'pick_up',
+      const [senderFirstName, ...senderLastNameParts] = params.sender.name.split(' ')
+      const senderLastName = senderLastNameParts.join(' ') || senderFirstName
+
+      const [receiverFirstName, ...receiverLastNameParts] = params.receiver.name.split(' ')
+      const receiverLastName = receiverLastNameParts.join(' ') || receiverFirstName
+
+      const requestBody = {
+        collection_type: 'pick_up',
         parcels: params.parcels.map(parcel => ({
-          receiver: {
-            name: params.receiver.name,
-            mobile: params.receiver.phone,
-            address: params.receiver.address,
-            city_code: params.receiver.city_code,
-            postal_code: params.receiver.postal_code
+          courier: {
+            name: 'IR_POST',
+            payment_type: 'SENDER',
+            service_type: 'EXPRESS'
           },
-          payment_type: 'SENDER',
+          from: {
+            contact: {
+              first_name: senderFirstName,
+              last_name: senderLastName,
+              mobile_no: params.sender.phone,
+              telephone_no: params.sender.phone,
+              email_address: 'sender@example.com',
+              company_name: params.sender.name,
+              national_code: '0000000000'
+            },
+            location: {
+              address: params.sender.address,
+              city_id: params.sender.city_code.toString(),
+              post_code: params.sender.postal_code,
+              country: 'IR',
+              city_name: '',
+              lat: '35.6892',
+              lon: '51.3890'
+            }
+          },
+          to: {
+            contact: {
+              first_name: receiverFirstName,
+              last_name: receiverLastName,
+              mobile_no: params.receiver.phone,
+              telephone_no: params.receiver.phone,
+              email_address: 'receiver@example.com',
+              company_name: '',
+              national_code: '0000000000'
+            },
+            location: {
+              address: params.receiver.address,
+              city_id: params.receiver.city_code.toString(),
+              post_code: params.receiver.postal_code,
+              country: 'IR',
+              city_name: '',
+              lat: '35.6892',
+              lon: '51.3890'
+            }
+          },
           parcel_properties: {
             length: Math.round(parcel.length_cm),
             width: Math.round(parcel.width_cm),
@@ -310,7 +363,13 @@ export class PostexClient {
             pre_paid_amount: 0,
             total_value_currency: 'IRR',
             box_type_id: 1
-          }
+          },
+          added_service: {
+            request_label: true,
+            request_packaging: false,
+            request_sms_notification: true
+          },
+          ready_to_accept: false
         }))
       }
 
@@ -324,27 +383,40 @@ export class PostexClient {
 
       console.log('🔹 [POSTEX CLIENT] Response:', JSON.stringify(response.data, null, 2))
 
-      if (response.data?.success && response.data?.data?.parcels?.[0]) {
-        const parcel = response.data.data.parcels[0]
+      if (response.data?.result?.[0]) {
+        const result = response.data.result[0]
         
-        if (parcel.error) {
-          console.error('❌ [POSTEX CLIENT] Parcel creation error:', parcel.error)
-          throw new Error(`Postex parcel error: ${parcel.error}`)
+        if (!result.isSuccess) {
+          const errorMessage = result.message || 'Unknown error'
+          console.error('❌ [POSTEX CLIENT] Parcel creation error:', errorMessage)
+          throw new Error(`Postex error: ${errorMessage}`)
         }
 
-        if (parcel.tracking_code && parcel.parcel_id) {
-          console.log('✅ [POSTEX CLIENT] Parcel created successfully:', {
-            tracking_code: parcel.tracking_code,
-            parcel_id: parcel.parcel_id
-          })
-          return {
-            tracking_code: parcel.tracking_code,
-            parcel_id: parcel.parcel_id
+        if (result.data) {
+          const parcelNo = result.data.parcel_no
+          const tracking = result.data.shipments?.[0]?.tracking
+          
+          if (tracking && parcelNo) {
+            const trackingCode = tracking.tracking_number || tracking.barcode
+            
+            if (trackingCode) {
+              console.log('✅ [POSTEX CLIENT] Parcel created successfully:', {
+                tracking_code: trackingCode,
+                parcel_id: parcelNo,
+                tracking_url: tracking.tracking_url
+              })
+              
+              return {
+                tracking_code: trackingCode,
+                parcel_id: parcelNo.toString()
+              }
+            }
           }
         }
       }
 
       console.warn('⚠️  [POSTEX CLIENT] No tracking code in response')
+      console.warn('⚠️  [POSTEX CLIENT] Response data:', JSON.stringify(response.data, null, 2))
       throw new Error('Postex did not return tracking information')
 
     } catch (error) {
@@ -356,6 +428,36 @@ export class PostexClient {
         console.error('❌ [POSTEX CLIENT] Invalid fields:')
         console.error(JSON.stringify(error.response.data.invalid_fields, null, 2))
       }
+      
+      if (error.response?.data) {
+        console.error('❌ [POSTEX CLIENT] Full response data:')
+        console.error(JSON.stringify(error.response.data, null, 2))
+      }
+      
+      throw error
+    }
+  }
+
+  async getParcelDetail(parcelId: string): Promise<PostexParcelDetailResponse | null> {
+    try {
+      if (!this.options.apiKey) {
+        console.warn('⚠️  [POSTEX CLIENT] No API key provided')
+        throw new Error('API key is required')
+      }
+
+      console.log('🔹 [POSTEX CLIENT] Fetching parcel detail for:', parcelId)
+
+      const response = await this.client.get<PostexParcelDetailResponse>(
+        `/api/v1/parcels/${parcelId}`
+      )
+
+      console.log('🔹 [POSTEX CLIENT] Parcel detail response:', JSON.stringify(response.data, null, 2))
+
+      return response.data
+    } catch (error) {
+      console.error('❌ [POSTEX CLIENT] Error fetching parcel detail')
+      console.error('❌ [POSTEX CLIENT] Status:', error.response?.status)
+      console.error('❌ [POSTEX CLIENT] Message:', error.response?.data?.message)
       
       if (error.response?.data) {
         console.error('❌ [POSTEX CLIENT] Full response data:')

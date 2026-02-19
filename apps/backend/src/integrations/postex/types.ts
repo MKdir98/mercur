@@ -1,5 +1,29 @@
 export type DeliveryMode = 'delivery' | 'pickup'
 
+export enum PostexStatusCode {
+  PAYMENT_PENDING = 1,
+  PENDING_SELLER = 2,
+  ON_THE_WAY = 3,
+  FULL_DELIVERED = 4,
+  RETURNED = 5,
+  DELIVERING = 7,
+  CANCELED = 8,
+  READY_TO_ACCEPT = 9,
+  OTHER = 10
+}
+
+export interface PostexParcelDetailResponse {
+  isSuccess: boolean
+  current_status: {
+    group: {
+      code: number
+    }
+    code: string
+  }
+  tracking_code?: string
+  parcel_id?: string
+}
+
 export interface RateRequestPayload {
   delivery_mode: DeliveryMode
   destination: {

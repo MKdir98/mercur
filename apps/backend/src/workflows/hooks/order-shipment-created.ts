@@ -37,53 +37,5 @@ createOrderShipmentWorkflow.hooks.shipmentCreated(
         }
       })
     }
-
-    if (fulfillment.provider_id === 'postex') {
-      if (fulfillment.labels && fulfillment.labels.length > 0) {
-        console.log('🔹 [POSTEX HOOK] Labels already exist, skipping Postex integration')
-        return
-      }
-
-      console.log('🔹 [POSTEX HOOK] Creating Postex shipment')
-
-      try {
-        const fulfillmentModule = container.resolve(Modules.FULFILLMENT)
-        const postexService: any = container.resolve('postexFulfillmentService')
-        
-        if (!postexService) {
-          throw new Error('Postex provider not found')
-        }
-
-        if (typeof postexService.createPostexShipment !== 'function') {
-          throw new Error('PostexService does not have createPostexShipment method')
-        }
-
-        const postexShipmentData = await postexService.createPostexShipment(
-          fulfillment.order.id,
-          fulfillment.id
-        )
-
-        console.log('✅ [POSTEX HOOK] Postex shipment created', {
-          tracking_number: postexShipmentData.tracking_number,
-          parcel_id: postexShipmentData.postex_parcel_id
-        })
-
-        await fulfillmentModule.updateFulfillment(fulfillment.id, {
-          labels: [{
-            tracking_number: postexShipmentData.tracking_number,
-            tracking_url: postexShipmentData.tracking_url,
-            label_url: postexShipmentData.label_url
-          }]
-        })
-
-        console.log('✅ [POSTEX HOOK] Fulfillment labels created with Postex tracking')
-
-      } catch (error: any) {
-        console.error('❌ [POSTEX HOOK] Error creating Postex shipment', {
-          message: error.message,
-          stack: error.stack
-        })
-      }
-    }
   }
 )

@@ -85,6 +85,14 @@ module.exports = defineConfig({
             options: {
               apiKey: process.env.STRIPE_SECRET_API_KEY
             }
+          },
+          {
+            resolve: '@mercurjs/payment-zarinpal',
+            id: 'zarinpal',
+            options: {
+              merchantId: process.env.ZARINPAL_MERCHANT_ID,
+              sandbox: process.env.ZARINPAL_SANDBOX === 'true'
+            }
           }
         ]
       }

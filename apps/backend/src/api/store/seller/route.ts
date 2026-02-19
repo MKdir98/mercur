@@ -1,5 +1,6 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
+import { StoreStatus } from '@mercurjs/framework'
 
 /**
  * @oas [get] /store/seller
@@ -58,6 +59,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const { data: sellers, metadata } = await query.graph({
     entity: 'seller',
     fields: req.queryConfig.fields,
+    filters: { store_status: StoreStatus.ACTIVE },
     pagination: req.queryConfig.pagination
   })
 

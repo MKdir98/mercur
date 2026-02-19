@@ -38,6 +38,9 @@ if [ "$#" -lt 1 ]; then
     echo "  --force-rebuild      Force rebuild all projects even if no changes"
     echo "  --skip-services      Skip Redis/Elasticsearch checks (for dev/testing)"
     echo ""
+    echo "Proxy (optional): set HTTP_PROXY and/or HTTPS_PROXY in config file or environment"
+    echo "  Example in .properties: HTTP_PROXY=http://proxy.example.com:8080"
+    echo ""
     echo "Examples:"
     echo "  sudo bash $0 demo.properties deploy"
     echo "  sudo bash $0 production.properties deploy --with-ssl"
@@ -147,6 +150,27 @@ validate_config() {
 }
 
 validate_config
+
+apply_proxy() {
+    if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
+        export HTTP_PROXY="${HTTP_PROXY:-}"
+        export HTTPS_PROXY="${HTTPS_PROXY:-$HTTP_PROXY}"
+        export http_proxy="${http_proxy:-$HTTP_PROXY}"
+        export https_proxy="${https_proxy:-$HTTPS_PROXY}"
+        export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1}"
+        export no_proxy="${no_proxy:-$NO_PROXY}"
+        echo -e "${BLUE}ℹ${NC} Using HTTP proxy: ${HTTP_PROXY:-$HTTPS_PROXY}"
+        if [ -w /etc/apt/apt.conf.d ] 2>/dev/null; then
+            local apt_proxy="${HTTP_PROXY:-$HTTPS_PROXY}"
+            if [ -n "$apt_proxy" ]; then
+                echo "Acquire::http::Proxy \"$apt_proxy\";" > /etc/apt/apt.conf.d/99deploy-proxy 2>/dev/null || true
+                echo "Acquire::https::Proxy \"$apt_proxy\";" >> /etc/apt/apt.conf.d/99deploy-proxy 2>/dev/null || true
+            fi
+        fi
+    fi
+}
+
+apply_proxy
 
 ###############################################################################
 # Helper Functions
@@ -845,7 +869,19 @@ setup_nginx() {
     
     local nginx_config_name="marketplace-${DEPLOY_MODE}"
     
-    # Check if SSL is already configured
+    print_info "Optimizing Nginx global settings..."
+    if ! grep -q "worker_connections 4096" /etc/nginx/nginx.conf; then
+        sed -i 's/worker_connections [0-9]*;/worker_connections 4096;/g' /etc/nginx/nginx.conf
+    fi
+    
+    if ! grep -q "worker_rlimit_nofile" /etc/nginx/nginx.conf; then
+        sed -i '/worker_processes/a worker_rlimit_nofile 8192;' /etc/nginx/nginx.conf
+    fi
+    
+    if ! grep -q "keepalive_timeout" /etc/nginx/nginx.conf; then
+        sed -i '/http {/a \    keepalive_timeout 65;\n    keepalive_requests 100;' /etc/nginx/nginx.conf
+    fi
+    
     local has_ssl=false
     if [ -f /etc/nginx/sites-available/$nginx_config_name ] && grep -q "listen 443 ssl" /etc/nginx/sites-available/$nginx_config_name; then
         has_ssl=true
@@ -867,23 +903,27 @@ setup_nginx() {
     cat > /etc/nginx/sites-available/$nginx_config_name << 'NGINXEOF'
 # Upstream definitions
 upstream backend_MODE {
-    server 127.0.0.1:BACKEND_PORT;
-    keepalive 64;
+    server 127.0.0.1:BACKEND_PORT max_fails=3 fail_timeout=30s;
+    keepalive 256;
+    keepalive_requests 1000;
+    keepalive_timeout 60s;
 }
 
 upstream storefront_MODE {
-    server 127.0.0.1:STOREFRONT_PORT;
-    keepalive 64;
+    server 127.0.0.1:STOREFRONT_PORT max_fails=3 fail_timeout=30s;
+    keepalive 256;
+    keepalive_requests 1000;
+    keepalive_timeout 60s;
 }
 
 upstream vendor_panel_MODE {
-    server 127.0.0.1:VENDOR_PORT;
+    server 127.0.0.1:VENDOR_PORT max_fails=3 fail_timeout=30s;
     keepalive 64;
 }
 
-# Rate limiting zones
-limit_req_zone $binary_remote_addr zone=api_limit_MODE:10m rate=10r/s;
-limit_req_zone $binary_remote_addr zone=general_limit_MODE:10m rate=30r/s;
+# Rate limiting zones - Optimized for vendor panel concurrent requests
+limit_req_zone $binary_remote_addr zone=api_limit_MODE:10m rate=50r/s;
+limit_req_zone $binary_remote_addr zone=general_limit_MODE:10m rate=100r/s;
 
 # Main Storefront
 server {
@@ -914,13 +954,13 @@ server {
     error_log /var/log/nginx/storefront-MODE-error.log;
     
     location / {
-        limit_req zone=general_limit_MODE burst=20 nodelay;
+        limit_req zone=general_limit_MODE burst=50 nodelay;
         
         proxy_pass http://storefront_MODE;
         proxy_http_version 1.1;
         
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
+        proxy_set_header Connection "";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -959,29 +999,32 @@ server {
     error_log /var/log/nginx/backend-MODE-error.log;
     
     location / {
-        limit_req zone=api_limit_MODE burst=30 nodelay;
+        limit_req zone=api_limit_MODE burst=100 nodelay;
         
         proxy_pass http://backend_MODE;
         proxy_http_version 1.1;
         
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
+        proxy_set_header Connection "";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         
-        # Important for authentication and cookies
         proxy_pass_header Set-Cookie;
         proxy_pass_header Authorization;
         proxy_cookie_path / /;
         
         proxy_cache_bypass $http_upgrade;
+        proxy_buffering off;
         
-        # Longer timeouts for API
         proxy_connect_timeout 120s;
         proxy_send_timeout 120s;
         proxy_read_timeout 120s;
+        
+        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        proxy_next_upstream_tries 2;
+        proxy_next_upstream_timeout 10s;
     }
 }
 
@@ -1010,13 +1053,13 @@ server {
     error_log /var/log/nginx/vendor-MODE-error.log;
     
     location / {
-        limit_req zone=general_limit_MODE burst=20 nodelay;
+        limit_req zone=general_limit_MODE burst=50 nodelay;
         
         proxy_pass http://vendor_panel_MODE;
         proxy_http_version 1.1;
         
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
+        proxy_set_header Connection "";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -1074,7 +1117,8 @@ module.exports = {
       interpreter: 'none',
       env: {
         NODE_ENV: 'production',
-        PORT: $BACKEND_PORT
+        PORT: $BACKEND_PORT,
+        UV_THREADPOOL_SIZE: 128
       },
       instances: 1,
       exec_mode: 'fork',
@@ -1086,7 +1130,10 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       min_uptime: '10s',
-      max_restarts: 10
+      max_restarts: 10,
+      kill_timeout: 5000,
+      listen_timeout: 10000,
+      shutdown_with_message: true
     },
     {
       name: 'storefront-$DEPLOY_MODE',
@@ -1461,6 +1508,556 @@ deploy() {
 }
 
 ###############################################################################
+# Mail Server Setup (Mailcow)
+###############################################################################
+
+create_mailcow_config() {
+    local domain=$1
+    local config_file="mailcow.conf"
+    
+    print_info "Creating mailcow.conf from scratch..."
+    
+    local dbroot_pass=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 28)
+    local dbpass=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 28)
+    local redis_pass=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 28)
+    
+    cat > "$config_file" << EOF
+# Mailcow Configuration
+# Generated by deploy script
+
+# Hostname
+MAILCOW_HOSTNAME=$domain
+
+# Timezone
+TZ=Europe/Berlin
+
+# Database Configuration
+DBNAME=mailcow
+DBUSER=mailcow
+DBPASS=$dbpass
+DBROOT=$dbroot_pass
+
+# Redis Configuration
+REDISPASS=$redis_pass
+
+# HTTP/HTTPS Configuration (localhost only to avoid conflicts)
+HTTP_PORT=8880
+HTTPS_PORT=8443
+HTTP_BIND=127.0.0.1
+HTTPS_BIND=127.0.0.1
+
+# Skip Let's Encrypt (we use external Nginx + Certbot)
+SKIP_LETS_ENCRYPT=y
+SKIP_CLAMD=n
+SKIP_SOGO=n
+
+# Additional Configuration
+ADDITIONAL_SAN=
+ADDITIONAL_SERVER_NAMES=
+
+# API Configuration
+API_KEY=$(openssl rand -base64 32)
+API_KEY_READ_ONLY=$(openssl rand -base64 32)
+API_ALLOW_FROM=127.0.0.1,::1
+
+# Watchdog
+WATCHDOG_NOTIFY_EMAIL=
+WATCHDOG_NOTIFY_BAN=y
+WATCHDOG_EXTERNAL_CHECKS=n
+WATCHDOG_MYSQL_REPLICATION_CHECKS=n
+WATCHDOG_SUBJECT=Mailcow Watchdog Alert
+
+# Backup
+MAILDIR_GC_TIME=7200
+MAILDIR_SUB=Maildir
+
+# Logging
+LOG_LINES=9999
+
+# IPv6
+IPV6_NETWORK=fd4d:6169:6c63:6f77::/64
+
+# Compose Project Name
+COMPOSE_PROJECT_NAME=mailcowdockerized
+
+# Docker Compose Version Check
+SKIP_COMPOSE_VERSION_CHECK=n
+EOF
+    
+    print_success "mailcow.conf created with secure random passwords"
+}
+
+install_mailcow() {
+    print_banner
+    print_step "Installing Mailcow mail server..."
+    echo ""
+    
+    check_root
+    
+    local MAIL_DOMAIN="${MAIL_DOMAIN:-mail.${STOREFRONT_DOMAIN}}"
+    local MAILCOW_DIR="${MAILCOW_DIR:-/opt/mailcow-dockerized}"
+    
+    print_info "Mail domain: $MAIL_DOMAIN"
+    print_info "Installation directory: $MAILCOW_DIR"
+    echo ""
+    
+    print_warning "Prerequisites check:"
+    print_warning "  1. DNS A record: $MAIL_DOMAIN -> $(curl -s ifconfig.me 2>/dev/null || echo 'YOUR_SERVER_IP')"
+    print_warning "  2. DNS MX record: ${STOREFRONT_DOMAIN} -> $MAIL_DOMAIN"
+    print_warning "  3. Ports 25, 110, 143, 465, 587, 993, 995 must be open"
+    echo ""
+    
+    read -p "Continue with installation? (y/n) " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Installation cancelled"
+        return 0
+    fi
+    
+    if ! command -v docker &> /dev/null; then
+        print_info "Installing Docker..."
+        
+        if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
+            print_info "Configuring Docker installation with proxy..."
+            export http_proxy="${HTTP_PROXY:-$HTTPS_PROXY}"
+            export https_proxy="${HTTPS_PROXY:-$HTTP_PROXY}"
+        fi
+        
+        curl -fsSL https://get.docker.com | sh
+        systemctl enable docker
+        systemctl start docker
+        print_success "Docker installed"
+    else
+        print_success "Docker already installed"
+    fi
+    
+    if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
+        print_info "Configuring Docker daemon to use proxy..."
+        
+        mkdir -p /etc/systemd/system/docker.service.d
+        
+        cat > /etc/systemd/system/docker.service.d/http-proxy.conf << EOF
+[Service]
+Environment="HTTP_PROXY=${HTTP_PROXY:-$HTTPS_PROXY}"
+Environment="HTTPS_PROXY=${HTTPS_PROXY:-$HTTP_PROXY}"
+Environment="NO_PROXY=localhost,127.0.0.1,${NO_PROXY:-}"
+EOF
+        
+        systemctl daemon-reload
+        systemctl restart docker
+        print_success "Docker proxy configured"
+        
+        mkdir -p ~/.docker
+        cat > ~/.docker/config.json << EOF
+{
+  "proxies": {
+    "default": {
+      "httpProxy": "${HTTP_PROXY:-$HTTPS_PROXY}",
+      "httpsProxy": "${HTTPS_PROXY:-$HTTP_PROXY}",
+      "noProxy": "localhost,127.0.0.1,${NO_PROXY:-}"
+    }
+  }
+}
+EOF
+        print_success "Docker client proxy configured"
+    fi
+    
+    if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+        print_info "Installing Docker Compose..."
+        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+        print_success "Docker Compose installed"
+    else
+        print_success "Docker Compose already installed"
+    fi
+    
+    if [ -d "$MAILCOW_DIR" ]; then
+        print_warning "Mailcow directory already exists at $MAILCOW_DIR"
+        read -p "Update existing installation? (y/n) " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            cd "$MAILCOW_DIR"
+            git pull
+            
+            print_info "Configuring Mailcow to avoid port conflicts..."
+            if [ -f mailcow.conf ]; then
+                sed -i "s/^HTTP_PORT=.*/HTTP_PORT=8880/" mailcow.conf
+                sed -i "s/^HTTPS_PORT=.*/HTTPS_PORT=8443/" mailcow.conf
+                sed -i "s/^HTTP_BIND=.*/HTTP_BIND=127.0.0.1/" mailcow.conf
+                sed -i "s/^HTTPS_BIND=.*/HTTPS_BIND=127.0.0.1/" mailcow.conf
+                
+                if ! grep -q "^SKIP_LETS_ENCRYPT=" mailcow.conf; then
+                    echo "SKIP_LETS_ENCRYPT=y" >> mailcow.conf
+                else
+                    sed -i "s/^SKIP_LETS_ENCRYPT=.*/SKIP_LETS_ENCRYPT=y/" mailcow.conf
+                fi
+                
+                if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
+                    if ! grep -q "^HTTP_PROXY=" mailcow.conf; then
+                        cat >> mailcow.conf << EOF
+
+# Proxy Configuration
+HTTP_PROXY=${HTTP_PROXY:-$HTTPS_PROXY}
+HTTPS_PROXY=${HTTPS_PROXY:-$HTTP_PROXY}
+NO_PROXY=localhost,127.0.0.1,${NO_PROXY:-}
+EOF
+                    fi
+                fi
+                print_success "Configuration updated"
+            else
+                print_warning "mailcow.conf not found, creating it..."
+                create_mailcow_config "$MAIL_DOMAIN"
+            fi
+            
+            print_info "Stopping existing containers..."
+            docker compose down
+            
+            docker compose pull
+            docker compose up -d
+            
+            print_info "Waiting for services to start..."
+            sleep 10
+            
+            print_success "Mailcow updated"
+        fi
+        
+        print_info "Configuring Nginx reverse proxy..."
+        local nginx_mail_config="/etc/nginx/sites-available/mailcow-${DEPLOY_MODE}"
+        
+        if [ ! -f "$nginx_mail_config" ]; then
+            print_info "Creating Nginx configuration for Mailcow..."
+            cat > "$nginx_mail_config" << NGINXMAIL
+# Mailcow Webmail - ${DEPLOY_MODE}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $MAIL_DOMAIN;
+    
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    
+    # Logging
+    access_log /var/log/nginx/mailcow-${DEPLOY_MODE}-access.log;
+    error_log /var/log/nginx/mailcow-${DEPLOY_MODE}-error.log;
+    
+    location / {
+        proxy_pass http://127.0.0.1:8880;
+        proxy_http_version 1.1;
+        
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        client_max_body_size 50M;
+        client_body_timeout 120s;
+        
+        proxy_connect_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
+    }
+}
+NGINXMAIL
+            
+            ln -sf "$nginx_mail_config" /etc/nginx/sites-enabled/
+            
+            if nginx -t 2>/dev/null; then
+                systemctl reload nginx
+                print_success "Nginx reverse proxy configured and reloaded"
+            else
+                print_error "Nginx configuration test failed!"
+                nginx -t
+            fi
+        else
+            print_success "Nginx configuration already exists"
+        fi
+        
+        print_success "════════════════════════════════════════════════════════"
+        print_success "Mailcow is ready! 📧"
+        print_success "════════════════════════════════════════════════════════"
+        echo ""
+        print_info "Mailcow is now accessible at: http://$MAIL_DOMAIN"
+        print_info "Default credentials:"
+        echo "  Username: admin"
+        echo "  Password: moohoo"
+        echo ""
+        print_warning "IMPORTANT: Change the default password immediately!"
+        echo ""
+        print_info "Next steps:"
+        echo "  1. Setup SSL: sudo bash $0 $CONFIG_FILE ssl-mail"
+        echo "  2. Configure DNS records (SPF, DKIM, DMARC)"
+        echo "  3. Create mailboxes in Mailcow admin panel"
+        echo ""
+        
+        return 0
+    fi
+    
+    print_info "Cloning Mailcow repository..."
+    cd /opt
+    
+    if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
+        print_info "Using proxy for git clone..."
+        git config --global http.proxy "${HTTP_PROXY:-$HTTPS_PROXY}"
+        git config --global https.proxy "${HTTPS_PROXY:-$HTTP_PROXY}"
+    fi
+    
+    git clone https://github.com/mailcow/mailcow-dockerized
+    cd mailcow-dockerized
+    print_success "Repository cloned"
+    
+    if [ ! -f "generate_config.sh" ]; then
+        print_warning "generate_config.sh not found, creating mailcow.conf manually..."
+        create_mailcow_config "$MAIL_DOMAIN"
+    else
+        print_info "Generating Mailcow configuration..."
+        ./generate_config.sh <<EOF
+$MAIL_DOMAIN
+Europe/Berlin
+EOF
+        print_success "Configuration generated"
+        
+        print_info "Configuring mailcow.conf for localhost binding..."
+        sed -i "s/^MAILCOW_HOSTNAME=.*/MAILCOW_HOSTNAME=$MAIL_DOMAIN/" mailcow.conf
+        sed -i "s/^HTTP_PORT=.*/HTTP_PORT=8880/" mailcow.conf
+        sed -i "s/^HTTPS_PORT=.*/HTTPS_PORT=8443/" mailcow.conf
+        sed -i "s/^HTTP_BIND=.*/HTTP_BIND=127.0.0.1/" mailcow.conf
+        sed -i "s/^HTTPS_BIND=.*/HTTPS_BIND=127.0.0.1/" mailcow.conf
+        sed -i "s/^SKIP_LETS_ENCRYPT=.*/SKIP_LETS_ENCRYPT=y/" mailcow.conf
+        
+        if ! grep -q "^SKIP_LETS_ENCRYPT=" mailcow.conf; then
+            echo "SKIP_LETS_ENCRYPT=y" >> mailcow.conf
+        fi
+    fi
+    
+    if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
+        print_info "Adding proxy configuration to mailcow.conf..."
+        cat >> mailcow.conf << EOF
+
+# Proxy Configuration
+HTTP_PROXY=${HTTP_PROXY:-$HTTPS_PROXY}
+HTTPS_PROXY=${HTTPS_PROXY:-$HTTP_PROXY}
+NO_PROXY=localhost,127.0.0.1,${NO_PROXY:-}
+EOF
+        print_success "Proxy configuration added to mailcow.conf"
+    fi
+    
+    print_info "Starting Mailcow containers (this may take several minutes)..."
+    if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
+        print_info "Pulling images through proxy..."
+        export HTTP_PROXY="${HTTP_PROXY:-$HTTPS_PROXY}"
+        export HTTPS_PROXY="${HTTPS_PROXY:-$HTTP_PROXY}"
+        export NO_PROXY="localhost,127.0.0.1,${NO_PROXY:-}"
+    fi
+    
+    docker compose pull
+    docker compose up -d
+    
+    print_info "Waiting for services to start..."
+    sleep 30
+    
+    print_info "Configuring Nginx reverse proxy..."
+    local nginx_mail_config="/etc/nginx/sites-available/mailcow-${DEPLOY_MODE}"
+    
+    cat > "$nginx_mail_config" << NGINXMAIL
+# Mailcow Webmail - ${DEPLOY_MODE}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $MAIL_DOMAIN;
+    
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    
+    # Logging
+    access_log /var/log/nginx/mailcow-${DEPLOY_MODE}-access.log;
+    error_log /var/log/nginx/mailcow-${DEPLOY_MODE}-error.log;
+    
+    location / {
+        proxy_pass http://127.0.0.1:8880;
+        proxy_http_version 1.1;
+        
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        client_max_body_size 50M;
+        client_body_timeout 120s;
+        
+        proxy_connect_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
+    }
+}
+NGINXMAIL
+    
+    ln -sf "$nginx_mail_config" /etc/nginx/sites-enabled/
+    
+    if nginx -t 2>/dev/null; then
+        systemctl reload nginx
+        print_success "Nginx reverse proxy configured and reloaded"
+    else
+        print_error "Nginx configuration test failed!"
+        nginx -t
+    fi
+    
+    print_success "════════════════════════════════════════════════════════"
+    print_success "Mailcow installation completed! 📧"
+    print_success "════════════════════════════════════════════════════════"
+    echo ""
+    print_info "Mailcow is now accessible at: http://$MAIL_DOMAIN"
+    print_info "Default credentials:"
+    echo "  Username: admin"
+    echo "  Password: moohoo"
+    echo ""
+    print_warning "IMPORTANT: Change the default password immediately!"
+    echo ""
+    print_info "Next steps:"
+    echo "  1. Setup SSL: sudo bash $0 $CONFIG_FILE ssl-mail"
+    echo "  2. Configure DNS records (SPF, DKIM, DMARC)"
+    echo "  3. Create mailboxes in Mailcow admin panel"
+    echo ""
+    print_info "Useful commands:"
+    echo "  View logs:        cd $MAILCOW_DIR && docker compose logs -f"
+    echo "  Restart:          cd $MAILCOW_DIR && docker compose restart"
+    echo "  Stop:             cd $MAILCOW_DIR && docker compose stop"
+    echo "  Start:            cd $MAILCOW_DIR && docker compose up -d"
+    echo "  Update:           cd $MAILCOW_DIR && ./update.sh"
+    echo ""
+    
+    if command -v ufw &> /dev/null; then
+        print_info "Opening firewall ports for mail server..."
+        ufw allow 25/tcp comment 'SMTP'
+        ufw allow 110/tcp comment 'POP3'
+        ufw allow 143/tcp comment 'IMAP'
+        ufw allow 465/tcp comment 'SMTPS'
+        ufw allow 587/tcp comment 'Submission'
+        ufw allow 993/tcp comment 'IMAPS'
+        ufw allow 995/tcp comment 'POP3S'
+        print_success "Firewall ports opened"
+    fi
+    echo ""
+}
+
+###############################################################################
+# SSL Setup for Mailcow
+###############################################################################
+
+setup_ssl_mailcow() {
+    print_banner
+    check_root
+    
+    local MAIL_DOMAIN="${MAIL_DOMAIN:-mail.${STOREFRONT_DOMAIN}}"
+    local nginx_mail_config="/etc/nginx/sites-available/mailcow-${DEPLOY_MODE}"
+    
+    print_step "Setting up SSL for Mailcow..."
+    echo ""
+    
+    if [ ! -f "$nginx_mail_config" ]; then
+        print_error "Nginx configuration for Mailcow not found!"
+        print_error "Please run 'sudo bash $0 $CONFIG_FILE mail' first to configure Nginx."
+        echo ""
+        print_info "The mail command will:"
+        echo "  1. Configure Mailcow (if needed)"
+        echo "  2. Setup Nginx reverse proxy"
+        echo "  3. Then you can run ssl-mail"
+        exit 1
+    fi
+    
+    if [ ! -L "/etc/nginx/sites-enabled/mailcow-${DEPLOY_MODE}" ]; then
+        print_warning "Nginx config exists but not enabled, enabling it..."
+        ln -sf "$nginx_mail_config" /etc/nginx/sites-enabled/
+        nginx -t && systemctl reload nginx
+    fi
+    
+    install_certbot
+    
+    print_info "Getting SSL certificate for $MAIL_DOMAIN..."
+    certbot --nginx -d $MAIL_DOMAIN --non-interactive --agree-tos --redirect --email admin@$STOREFRONT_DOMAIN || {
+        print_warning "Failed to get SSL certificate."
+        echo ""
+        print_info "Possible reasons:"
+        echo "  1. DNS not configured: $MAIL_DOMAIN should point to this server"
+        echo "  2. Firewall blocking port 80/443"
+        echo "  3. Nginx configuration issue"
+        echo ""
+        print_info "Check DNS:"
+        echo "  dig $MAIL_DOMAIN"
+        echo ""
+        print_info "Try manually:"
+        echo "  sudo certbot --nginx -d $MAIL_DOMAIN"
+        return 1
+    }
+    
+    print_success "════════════════════════════════════════════════════════"
+    print_success "SSL setup completed for Mailcow! 🔒"
+    print_success "════════════════════════════════════════════════════════"
+    echo ""
+    print_info "Access your mail server at: https://$MAIL_DOMAIN"
+    echo ""
+    print_info "Next steps:"
+    echo "  1. Login to admin panel: https://$MAIL_DOMAIN"
+    echo "  2. Change default password (admin/moohoo)"
+    echo "  3. Configure DKIM keys"
+    echo "  4. Create mailboxes"
+    echo ""
+}
+
+###############################################################################
+# Diagnostics Function
+###############################################################################
+
+diagnose_503() {
+    print_banner
+    print_step "Diagnosing 503 errors..."
+    echo ""
+    
+    print_info "Checking PM2 processes..."
+    pm2 list
+    echo ""
+    
+    print_info "Checking Nginx upstream status..."
+    echo "Backend connections:"
+    netstat -an | grep ":$BACKEND_PORT" | grep ESTABLISHED | wc -l
+    echo ""
+    
+    print_info "Recent Nginx errors (last 50 lines):"
+    tail -50 /var/log/nginx/backend-${DEPLOY_MODE}-error.log 2>/dev/null || echo "No error log found"
+    echo ""
+    
+    print_info "Recent Backend PM2 errors (last 30 lines):"
+    pm2 logs backend-${DEPLOY_MODE} --err --lines 30 --nostream 2>/dev/null || echo "No PM2 logs found"
+    echo ""
+    
+    print_info "System resources:"
+    echo "Memory usage:"
+    free -h
+    echo ""
+    echo "CPU load:"
+    uptime
+    echo ""
+    
+    print_info "Nginx worker connections:"
+    ps aux | grep nginx | grep -v grep
+    echo ""
+    
+    print_info "Recommendations:"
+    echo "1. Check if backend is responding: curl -I http://localhost:$BACKEND_PORT/health"
+    echo "2. Monitor live logs: pm2 logs backend-${DEPLOY_MODE}"
+    echo "3. Check Nginx access log: tail -f /var/log/nginx/backend-${DEPLOY_MODE}-access.log"
+    echo "4. Restart backend if needed: pm2 restart backend-${DEPLOY_MODE}"
+    echo "5. Reload Nginx: sudo systemctl reload nginx"
+}
+
+###############################################################################
 # Main Script Entry Point
 ###############################################################################
 
@@ -1476,6 +2073,16 @@ case "$COMMAND" in
         check_root
         setup_ssl_auto
         ;;
+    diagnose|diag)
+        check_root
+        diagnose_503
+        ;;
+    mail|mailcow)
+        install_mailcow
+        ;;
+    ssl-mail)
+        setup_ssl_mailcow
+        ;;
     *)
         print_banner
         echo "Usage: sudo bash $0 <CONFIG_FILE> [COMMAND] [OPTIONS]"
@@ -1484,6 +2091,9 @@ case "$COMMAND" in
         echo "  deploy        Full deployment (install, build, configure)"
         echo "  update        Update code & rebuild (SSL-safe, preserves Nginx config)"
         echo "  ssl           Setup SSL/HTTPS certificates"
+        echo "  diagnose      Diagnose 503 errors and connection issues"
+        echo "  mail          Install Mailcow mail server with webmail"
+        echo "  ssl-mail      Setup SSL certificate for mail server"
         echo ""
         echo "Options:"
         echo "  --with-ssl           Automatically setup SSL after deployment"
@@ -1518,6 +2128,13 @@ case "$COMMAND" in
         echo "  ssl command:"
         echo "    • Setup SSL certificates with Let's Encrypt (non-interactive)"
         echo "    • Auto-renewal configuration"
+        echo ""
+        echo "  mail command:"
+        echo "    • Install Mailcow mail server (Docker-based)"
+        echo "    • Webmail interface (SOGo)"
+        echo "    • SMTP, IMAP, POP3 support"
+        echo "    • Spam filter & Antivirus"
+        echo "    • Configure Nginx reverse proxy"
         echo ""
         echo "Performance Features:"
         echo "  ✓ Parallel builds (Backend, Storefront, Vendor Panel)"
