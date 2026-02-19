@@ -93,12 +93,12 @@ export async function GET(
           $ne: null
         }
       }
-    } as Record<string, unknown>,
+    },
     pagination: req.queryConfig.pagination
   })
 
   res.json({
-    returns: relations.flatMap((relation) => (relation as { returns?: unknown[] }).returns ?? []),
+    returns: relations.flatMap((relation) => relation.returns),
     count: metadata?.count,
     offset: metadata?.skip,
     limit: metadata?.take

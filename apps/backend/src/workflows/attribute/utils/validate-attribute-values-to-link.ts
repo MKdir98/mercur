@@ -45,7 +45,7 @@ export const validateAttributeValuesToLink = async ({
         }
       })
 
-      attributeMap.set(id, attribute as any)
+      attributeMap.set(id, attribute)
     }
 
     const allowedValues = attributeMap

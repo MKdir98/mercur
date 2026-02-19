@@ -40,7 +40,7 @@ export const validateOrderReturnRequestStep = createStep(
       }
     })
 
-    const orderLineItems = (order.items ?? []).filter(Boolean).map((i) => i!.id)
+    const orderLineItems = order.items.map((i) => i.id)
 
     for (const item of input.line_items) {
       if (!orderLineItems.includes(item.line_item_id)) {

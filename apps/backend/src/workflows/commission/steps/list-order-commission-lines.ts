@@ -1,4 +1,8 @@
-import { ContainerRegistrationKeys, MathBN } from '@medusajs/framework/utils'
+import {
+  BigNumber,
+  ContainerRegistrationKeys,
+  MathBN
+} from '@medusajs/framework/utils'
 import { StepResponse, createStep } from '@medusajs/framework/workflows-sdk'
 
 export const listOrderCommissionLinesStep = createStep(
@@ -21,7 +25,7 @@ export const listOrderCommissionLinesStep = createStep(
       }
     })
 
-    const order_line_items = (order.items ?? []).filter(Boolean).map((i) => i!.id)
+    const order_line_items = order.items.map((i) => i.id)
 
     const { data: commission_lines } = await query.graph({
       entity: 'commission_line',
@@ -31,7 +35,7 @@ export const listOrderCommissionLinesStep = createStep(
       }
     })
 
-    const amount = commission_lines.reduce((acc, current) => {
+    const amount: BigNumber = commission_lines.reduce((acc, current) => {
       return MathBN.add(acc, current.value)
     }, MathBN.convert(0))
 

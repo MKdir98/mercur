@@ -18,7 +18,7 @@ splitAndCompleteCartWorkflow.hooks.orderSetCreated(
       }
     })
 
-    const ordersCreated = (set.orders ?? []).filter(Boolean).map((o) => o!.id)
+    const ordersCreated = set.orders.map((o) => o.id)
 
     for (const order_id of ordersCreated) {
       const {

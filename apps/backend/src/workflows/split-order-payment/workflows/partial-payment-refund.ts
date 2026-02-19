@@ -43,13 +43,7 @@ export const selectAndValidatePaymentRefundStep = createStep(
       }
     })
 
-    const payment_id = payment_collection.payments?.[0]?.id
-    if (!payment_id) {
-      throw new MedusaError(
-        MedusaError.Types.INVALID_DATA,
-        'No payment found for split order payment'
-      )
-    }
+    const payment_id = payment_collection.payments[0].id
 
     const {
       data: [payment]
@@ -68,13 +62,13 @@ export const selectAndValidatePaymentRefundStep = createStep(
       }
     })
 
-    const capturedAmount = (payment.captures || []).filter(Boolean).reduce(
-      (acc, capture) => MathBN.sum(acc, capture!.amount),
+    const capturedAmount = (payment.captures || []).reduce(
+      (acc, capture) => MathBN.sum(acc, capture.amount),
       MathBN.convert(0)
     )
 
-    const refundedAmount = (payment.refunds || []).filter(Boolean).reduce(
-      (acc, capture) => MathBN.sum(acc, capture!.amount),
+    const refundedAmount = (payment.refunds || []).reduce(
+      (acc, capture) => MathBN.sum(acc, capture.amount),
       MathBN.convert(0)
     )
 

@@ -64,18 +64,17 @@ export const GET = async (
     { throwIfKeyNotFound: true }
   )
 
-  const addr = stockLocation.address as Record<string, unknown> | undefined
-  if (addr?.city_id) {
+  if (stockLocation.address?.city_id) {
     try {
       const { data: [city] } = await query.graph({
         entity: 'city',
         fields: ['id', 'name', 'state_id', 'state.id', 'state.name'],
-        filters: { id: addr.city_id }
+        filters: { id: stockLocation.address.city_id }
       })
       
       if (city) {
-        addr.city_details = city
-        addr.state_id = (city as { state_id?: string }).state_id
+        stockLocation.address.city_details = city
+        stockLocation.address.state_id = city.state_id
       }
     } catch (error) {
       console.error('Failed to fetch city details:', error)
@@ -169,18 +168,17 @@ export const POST = async (
     { throwIfKeyNotFound: true }
   )
 
-  const addr2 = stockLocation.address as Record<string, unknown> | undefined
-  if (addr2?.city_id) {
+  if (stockLocation.address?.city_id) {
     try {
       const { data: [city] } = await query.graph({
         entity: 'city',
         fields: ['id', 'name', 'state_id', 'state.id', 'state.name'],
-        filters: { id: addr2.city_id }
+        filters: { id: stockLocation.address.city_id }
       })
       
       if (city) {
-        addr2.city_details = city
-        addr2.state_id = (city as { state_id?: string }).state_id
+        stockLocation.address.city_details = city
+        stockLocation.address.state_id = city.state_id
       }
     } catch (error) {
       console.error('Failed to fetch city details:', error)

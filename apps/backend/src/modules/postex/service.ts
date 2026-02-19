@@ -1,23 +1,15 @@
 import { AbstractFulfillmentProviderService, Modules, ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { PostexClient } from "../../integrations/postex/client"
-import { MedusaContainer } from "@medusajs/framework/types"
 
 class PostexService extends AbstractFulfillmentProviderService {
   static identifier = "postex"
-  private static globalContainer_: MedusaContainer
+  static LIFE_TIME = "SCOPED"
   
-  protected container_: MedusaContainer
+  protected container_: any
   protected options_: any
   protected manager_: any
 
-  static setGlobalContainer(container: MedusaContainer) {
-    PostexService.globalContainer_ = container
-  }
-
-  constructor(
-    container: MedusaContainer,
-    options: Record<string, any>
-  ) {
+  constructor(container, options) {
     super()
     this.container_ = container
     this.options_ = options
@@ -81,13 +73,7 @@ class PostexService extends AbstractFulfillmentProviderService {
       const locationAddress = fromLocation.address
 
       // 4. Get Postex codes from city table using knex
-      const container = PostexService.globalContainer_ || this.container_
-      
-      if (!container) {
-        throw new Error('خطا در استعلام هزینه ارسال: Container در دسترس نیست')
-      }
-
-      const knex = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+      const knex = this.container_.resolve(ContainerRegistrationKeys.PG_CONNECTION)
       
       if (!knex) {
         throw new Error('خطا در استعلام هزینه ارسال: سرویس پایگاه داده در دسترس نیست')
@@ -297,7 +283,7 @@ class PostexService extends AbstractFulfillmentProviderService {
           entity: 'shipping_option',
           fields: ['id', 'provider_id'],
           filters: {
-            id: shippingMethod.shipping_option_id ?? undefined
+            id: shippingMethod.shipping_option_id
           }
         })
 
@@ -400,21 +386,20 @@ class PostexService extends AbstractFulfillmentProviderService {
       }
 
       const originCityCode = await getPostexCodeByName(
-        locationAddress.city ?? '',
-        locationAddress.province ?? ''
+        locationAddress.city,
+        locationAddress.province
       )
 
       const destinationCityCode = await getPostexCodeByName(
-        deliveryAddress.city ?? '',
-        deliveryAddress.province ?? ''
+        deliveryAddress.city,
+        deliveryAddress.province
       )
 
       if (!originCityCode || !destinationCityCode) {
         throw new Error('خطا در ثبت مرسوله پستکس: کد شهر مبدأ یا مقصد در سیستم پستکس یافت نشد')
       }
 
-      const parcels = await Promise.all((order.items ?? []).filter(Boolean).map(async (itemRaw) => {
-        const item = itemRaw!
+      const parcels = await Promise.all(order.items.map(async (item) => {
         let weight, length, width, height
         
         if (item.variant_id) {
@@ -474,15 +459,15 @@ class PostexService extends AbstractFulfillmentProviderService {
       const isValidPostalCode = (code: string) => code && code.length === 10
       
       let senderPostalCode = '0000000000'
-      if (isValidPostalCode(locationAddress.postal_code ?? '')) {
-        senderPostalCode = locationAddress.postal_code ?? '0000000000'
+      if (isValidPostalCode(locationAddress.postal_code)) {
+        senderPostalCode = locationAddress.postal_code
       } else if (isValidPostalCode(seller.postal_code)) {
         senderPostalCode = seller.postal_code
       }
       
       const receiverPhone = deliveryAddress.phone || '09000000000'
-      const receiverPostalCode = isValidPostalCode(deliveryAddress.postal_code ?? '') 
-        ? (deliveryAddress.postal_code ?? '0000000000') 
+      const receiverPostalCode = isValidPostalCode(deliveryAddress.postal_code) 
+        ? deliveryAddress.postal_code 
         : '0000000000'
 
       console.log('🔹 [POSTEX SERVICE] Postal codes:', {

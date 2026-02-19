@@ -116,7 +116,7 @@ export async function POST(
     }
 
     // مقایسه password با hash
-    const isPasswordValid = await bcrypt.compare(password, String(passwordHash))
+    const isPasswordValid = await bcrypt.compare(password, passwordHash)
 
     if (!isPasswordValid) {
       res.status(401).json({

@@ -114,13 +114,13 @@ export const calculateCommissionLinesStep = createStep(
         entity: 'product',
         fields: ['categories.id'],
         filters: {
-          id: item.product_id ?? undefined
+          id: item.product_id
         }
       })
 
       const commissionRule =
         await commissionService.selectCommissionForProductLine({
-          product_category_id: (product.categories ?? [])[0]?.id || '',
+          product_category_id: product.categories[0]?.id || '',
           product_type_id: item.product_type_id || '',
           seller_id: seller_id
         })

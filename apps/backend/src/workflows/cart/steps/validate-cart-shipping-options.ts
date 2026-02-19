@@ -39,7 +39,7 @@ export const validateCartShippingOptionsStep = createStep(
           entity: sellerProductLink.entryPoint,
           fields: ['seller_id', 'product_id'],
           filters: {
-            product_id: (cart.items ?? []).map((item) => item?.product_id).filter(Boolean)
+            product_id: cart.items.map((item) => item.product_id)
           }
         }),
         query.graph({

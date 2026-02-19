@@ -24,7 +24,7 @@ const getVariantInventoryItemIds = async (
   })
 
   return items.data
-    .map((item) => (item.inventory_items ?? []).map((ii) => ii?.inventory_item_id).filter(Boolean))
+    .map((item) => item.inventory_items.map((ii) => ii.inventory_item_id))
     .flat(2)
 }
 

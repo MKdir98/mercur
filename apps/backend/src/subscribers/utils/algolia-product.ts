@@ -27,15 +27,14 @@ async function selectProductVariantsSupportedCountries(
     }
   })
 
-  let location_ids: string[] = []
+  let location_ids = []
 
   for (const variant of variants) {
     const inventory_items =
-      (variant.inventory_items ?? []).map((item) => item?.inventory).filter(Boolean) || []
+      variant.inventory_items?.map((item) => item.inventory) || []
     const locations = inventory_items
-      .flatMap((inventory_item) => inventory_item?.location_levels || [])
-      .map((level) => level?.location_id)
-      .filter((id): id is string => id != null)
+      .flatMap((inventory_item) => inventory_item.location_levels || [])
+      .map((level) => level.location_id)
 
     location_ids = location_ids.concat(locations)
   }
@@ -48,15 +47,14 @@ async function selectProductVariantsSupportedCountries(
     }
   })
 
-  let country_codes: string[] = []
+  let country_codes = []
 
   for (const location of stock_locations) {
     const fulfillmentSets =
-      location.fulfillment_sets?.flatMap((set) => set?.service_zones || []) || []
+      location.fulfillment_sets?.flatMap((set) => set.service_zones || []) || []
     const codes = fulfillmentSets
-      .flatMap((sz) => sz?.geo_zones || [])
-      .map((gz) => gz?.country_code)
-      .filter((c): c is string => c != null)
+      .flatMap((sz) => sz.geo_zones || [])
+      .map((gz) => gz.country_code)
 
     country_codes = country_codes.concat(codes)
   }
@@ -148,39 +146,44 @@ export async function findAndTransformAlgoliaProducts(
   })
 
   for (const product of products) {
-    const p = product as Record<string, unknown>
-    p.average_rating = await getAvgRating(container, 'product', product.id)
-    p.supported_countries = await selectProductVariantsSupportedCountries(container, product.id)
-    p.seller = await selectProductSeller(container, product.id)
-    p.options = (product.options ?? [])
-      .filter((o): o is NonNullable<typeof o> => o != null)
-      .map((option) => {
-        return (option.values ?? []).map((value) => {
-          const entry: Record<string, string> = {}
-          entry[option.title.toLowerCase()] = value?.value ?? ''
+    product.average_rating = await getAvgRating(
+      container,
+      'product',
+      product.id
+    )
+    product.supported_countries = await selectProductVariantsSupportedCountries(
+      container,
+      product.id
+    )
+    product.seller = await selectProductSeller(container, product.id)
+
+    product.options = product.options
+      ?.map((option) => {
+        return option.values.map((value) => {
+          const entry = {}
+          entry[option.title.toLowerCase()] = value.value
           return entry
         })
       })
       .flat()
-    const variants = product.variants ?? []
-    p.variants = variants.map((variant) => {
-      return (variant.options ?? []).reduce((entry, item) => {
-        if (item?.option) {
-          (entry as Record<string, string>)[item.option.title.toLowerCase()] = item.value ?? ''
-        }
-        return entry
-      }, { ...variant } as Record<string, unknown>)
-    })
-    p.attribute_values = (product.attribute_values ?? [])
-      .filter((a): a is NonNullable<typeof a> => a != null)
-      .map((attribute) => {
-        return {
-          name: attribute.attribute?.name ?? '',
-          value: attribute.value ?? '',
-          is_filterable: attribute.attribute?.is_filterable ?? false,
-          ui_component: attribute.attribute?.ui_component
-        }
+    product.variants = product.variants || []
+    product.variants = product.variants
+      ?.map((variant) => {
+        return variant.options?.reduce((entry, item) => {
+          entry[item.option.title.toLowerCase()] = item.value
+          return entry
+        }, variant)
       })
+      .flat()
+
+    product.attribute_values = product.attribute_values?.map((attribute) => {
+      return {
+        name: attribute.attribute.name,
+        value: attribute.value,
+        is_filterable: attribute.attribute.is_filterable,
+        ui_component: attribute.attribute.ui_component
+      }
+    })
   }
 
   return products as any[]

@@ -70,40 +70,33 @@ export const cancelOrderWorkflow = createWorkflow(
       options: { throwIfKeyNotFound: true }
     }).config({ name: 'get-cart' })
 
-    // @ts-ignore TS2321 - WorkflowData causes excessive stack depth
-    const order = transform({ orderQuery }, (d: any) => d.orderQuery.data[0]) as any
+    const order = transform(
+      { orderQuery },
+      ({ orderQuery }) => orderQuery.data[0]
+    )
 
-    cancelValidateOrder({ order: order as any, input })
+    cancelValidateOrder({ order, input })
 
-    const lineItemIds = transform({ order }, ({ order }: { order: any }) => {
-      return ((order as any).items ?? []).map((i: any) => i?.id).filter((id): id is string => id != null)
+    const lineItemIds = transform({ order }, ({ order }) => {
+      return order.items?.map((i) => i.id)
     })
 
-    const payoutId = transform({ order }, ({ order }: { order: any }) => {
-      const o = order as any
-      return o.payouts && o.payouts[0] ? o.payouts[0].id : null
+    const payoutId = transform({ order }, ({ order }) => {
+      return order.payouts && order.payouts[0] ? order.payouts[0].id : null
     })
-
-    const splitPayment = order.split_order_payment
-    if (!splitPayment) {
-      throw new MedusaError(
-        MedusaError.Types.INVALID_DATA,
-        'Order has no split order payment'
-      )
-    }
 
     parallelize(
       deleteReservationsByLineItemsStep(lineItemIds),
       cancelOrdersStep({ orderIds: [order.id] }),
       refundSplitOrderPaymentWorkflow.runAsStep({
         input: {
-          id: splitPayment.id,
-          amount: splitPayment.captured_amount
+          id: order.split_order_payment.id,
+          amount: order.split_order_payment.captured_amount
         }
       }),
       createPayoutReversalStep({
         payout_id: payoutId,
-        amount: splitPayment.captured_amount,
+        amount: order.split_order_payment.captured_amount,
         currency_code: order.currency_code
       }),
       emitEventStep({

@@ -49,9 +49,8 @@ export const listCommissionLinesStep = createStep(
       })
 
       itemLineIdFilter.$in = sellerOrders
-        .flatMap((o) => (o.order?.items ?? []))
-        .map((i) => i?.id)
-        .filter((id): id is string => id != null)
+        .flatMap((o) => o.order.items)
+        .map((i) => i.id)
     }
 
     const [commissionLines, count] = await service.listAndCountCommissionLines(
@@ -86,12 +85,12 @@ export const listCommissionLinesStep = createStep(
           items: {
             id: itemIds
           }
-        } as Record<string, unknown>
+        }
       })
 
       const expandedLines = commissionLines.map((line) => {
         const order = orders.find((o) =>
-          (o.items ?? []).some((i) => i?.id === line.item_line_id)
+          o.items.some((i) => i.id === line.item_line_id)
         )
         const rule = rules.find((r) => r.id === line.rule_id)
         return {

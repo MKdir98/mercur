@@ -21,5 +21,5 @@ export const fetchSellerByAuthActorId = async (
     },
     fields
   })
-  return seller as SellerDTO
+  return seller
 }
