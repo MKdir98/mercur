@@ -54,15 +54,18 @@ export const processPayoutForOrderWorkflow = createWorkflow(
       }
     })
 
+    const sellerId = transform(order, (o) => o.seller_id)
+
     const { data: sellers } = useQueryGraphStep({
       entity: 'seller',
       fields: ['*', 'payout_account.*'],
       filters: {
-        id: order.seller_id
+        id: sellerId
       }
     }).config({ name: 'query-seller' })
 
     const seller = transform(sellers, (sellers) => sellers[0])
+    const payoutAccountId = transform(seller, (s) => (s as { payout_account?: { id: string } }).payout_account?.id)
 
     validateSellerPayoutAccountStep(seller as any)
 
@@ -72,12 +75,15 @@ export const processPayoutForOrderWorkflow = createWorkflow(
       transaction_id: order.id,
       amount: payout_total,
       currency_code: order.currency_code,
-      account_id: (seller as { payout_account: { id: string } }).payout_account.id,
-      source_transaction: String(order.source_transaction)
+      account_id: payoutAccountId,
+      source_transaction: transform(order, (o) => `${o.source_transaction ?? ''}`)
     })
 
-    when({ createPayoutErr }, ({ createPayoutErr }) => !createPayoutErr).then(
-      () => {
+    when(
+      'payout-success',
+      { createPayoutErr },
+      ({ createPayoutErr }) => !createPayoutErr
+    ).then(() => {
         createRemoteLinkStep([
           {
             [Modules.ORDER]: {
@@ -99,8 +105,11 @@ export const processPayoutForOrderWorkflow = createWorkflow(
       }
     )
 
-    when({ createPayoutErr }, ({ createPayoutErr }) => createPayoutErr).then(
-      () => {
+    when(
+      'payout-failed',
+      { createPayoutErr },
+      ({ createPayoutErr }) => !!createPayoutErr
+    ).then(() => {
         emitEventStep({
           eventName: PayoutWorkflowEvents.FAILED,
           data: {
