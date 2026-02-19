@@ -86,6 +86,8 @@ export const GET = async (
         'id',
         'title',
         'handle',
+        'description',
+        'metadata',
         'thumbnail',
         'status',
         'images.*',
