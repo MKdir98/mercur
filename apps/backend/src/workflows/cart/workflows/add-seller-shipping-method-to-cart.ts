@@ -43,13 +43,14 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
     
     const logShippingOption = transform(
       { shippingOptionDetails },
-      ({ shippingOptionDetails: [shippingOption] }) => {
+      (d: any) => {
+        const shippingOption = d.shippingOptionDetails[0]
         console.log('📦 [WORKFLOW] Shipping Option Details:')
-        console.log('📦 [WORKFLOW] ID:', shippingOption.id)
-        console.log('📦 [WORKFLOW] Name:', shippingOption.name)
-        console.log('📦 [WORKFLOW] Price Type:', shippingOption.price_type)
-        console.log('📦 [WORKFLOW] Provider ID:', shippingOption.provider_id)
-        console.log('📦 [WORKFLOW] Prices:', JSON.stringify(shippingOption.prices, null, 2))
+        console.log('📦 [WORKFLOW] ID:', shippingOption?.id)
+        console.log('📦 [WORKFLOW] Name:', shippingOption?.name)
+        console.log('📦 [WORKFLOW] Price Type:', shippingOption?.price_type)
+        console.log('📦 [WORKFLOW] Provider ID:', shippingOption?.provider_id)
+        console.log('📦 [WORKFLOW] Prices:', JSON.stringify(shippingOption?.prices, null, 2))
         return true
       }
     )
@@ -59,7 +60,7 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
       ({ carts: [cart], option }) => ({
         cart_id: cart.id,
         option_ids: [
-          ...cart.shipping_methods.map((method) => method.shipping_option_id),
+          ...(cart.shipping_methods ?? []).map((method) => method?.shipping_option_id).filter((id): id is string => id != null),
           option.id
         ]
       })
@@ -103,7 +104,7 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
       { carts, newShippingOption: input.option },
       ({ carts: [cart], newShippingOption }) => {
         return [
-          ...cart.shipping_methods.map((sm) => sm.shipping_option_id),
+          ...(cart.shipping_methods ?? []).map((sm) => sm?.shipping_option_id).filter((id): id is string => id != null),
           newShippingOption.id
         ]
       }
@@ -132,11 +133,12 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
           CartShippingMethodDTO
         >()
 
-        for (const method of cart.shipping_methods) {
+        for (const method of cart.shipping_methods ?? []) {
+          if (!method) continue
           const sellerId = shippingOptionToSellerMap.get(
             method.shipping_option_id
           )!
-          existingShippingMethodsBySeller.set(sellerId, method)
+          existingShippingMethodsBySeller.set(sellerId, method as any)
         }
 
         const newOptionSellerId = shippingOptionToSellerMap.get(
@@ -151,7 +153,7 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
 
         return Array.from(existingShippingMethodsBySeller.values()).map(
           (method) => ({
-            shipping_option_id: method.shipping_option_id,
+            shipping_option_id: method!.shipping_option_id,
             cart_id: cart.id,
             name: method.name,
             data: method.data,

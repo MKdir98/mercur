@@ -4,7 +4,7 @@ export default async function logPaymentProvidersHandler({ event, container }: S
   console.log('🟢 [BACKEND] Application started - checking payment providers')
   
   try {
-    const paymentModule = container.resolve('paymentModuleService')
+    const paymentModule = container.resolve('paymentModuleService') as { listPaymentProviders: () => Promise<unknown[]> }
     const providers = await paymentModule.listPaymentProviders()
     
     console.log('🟢 [BACKEND] Available payment providers:', providers.map((p: any) => ({

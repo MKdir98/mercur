@@ -71,6 +71,7 @@ export const getFormattedOrderSetListWorkflow = createWorkflow(
       pagination: input.pagination
     })
 
+    // @ts-expect-error - WorkflowData type inference causes excessive stack depth
     const formattedOrderSets = transform(data, formatOrderSets)
 
     return new WorkflowResponse({ data: formattedOrderSets, metadata })

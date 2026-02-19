@@ -25,8 +25,11 @@ export default async function buyerAccountCreatedHandler({
     return
   }
 
+  const email = customer.email ?? ''
+  if (!email) return
+
   await notificationService.createNotifications({
-    to: customer.email,
+    to: email,
     channel: 'email',
     template: ResendNotificationTemplates.BUYER_ACCOUNT_CREATED,
     content: {

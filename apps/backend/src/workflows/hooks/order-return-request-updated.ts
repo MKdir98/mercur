@@ -34,9 +34,12 @@ updateOrderReturnRequestWorkflow.hooks.orderReturnRequestUpdated(
       }
     })
 
-    const returns = Array.isArray(order.returns)
-      ? order.returns
-      : [order.returns]
+    const orderReturns = (order as { returns?: Array<{ id: string }> }).returns
+    const returns = Array.isArray(orderReturns)
+      ? orderReturns
+      : orderReturns
+        ? [orderReturns]
+        : []
 
     const links = returns.map((r) => {
       return {

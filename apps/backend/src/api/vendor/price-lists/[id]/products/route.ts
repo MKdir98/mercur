@@ -83,7 +83,7 @@ export const GET = async (
   const variantIds: string[] = []
 
   priceList.prices?.forEach((price) => {
-    const variantId = price.price_set?.variant?.id
+    const variantId = price?.price_set?.variant?.id
 
     if (variantId) {
       variantIds.push(variantId)

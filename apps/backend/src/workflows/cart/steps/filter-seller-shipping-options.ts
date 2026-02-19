@@ -39,16 +39,16 @@ export const filterSellerShippingOptionsStep = createStep(
       entity: sellerProduct.entryPoint,
       fields: ['seller_id'],
       filters: {
-        product_id: cart.items.map((i) => i.product_id)
+        product_id: (cart.items ?? []).map((i) => i?.product_id).filter(Boolean)
       }
     })
 
     const uniqueSellersInCart = [...new Set(sellersInCart.map((s) => s.seller_id))]
     console.log('🟩 [FILTER_STEP] Sellers in cart:', uniqueSellersInCart)
 
-    const existingShippingOptions = cart.shipping_methods.map(
-      (sm) => sm.shipping_option_id
-    )
+    const existingShippingOptions = (cart.shipping_methods ?? []).map(
+      (sm) => sm?.shipping_option_id
+    ).filter(Boolean)
 
     console.log('🟩 [FILTER_STEP] Existing shipping option IDs:', existingShippingOptions)
 

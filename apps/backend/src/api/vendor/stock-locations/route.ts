@@ -92,17 +92,18 @@ export const POST = async (
     }
   })
 
-  if (stockLocation.address?.city_id) {
+  const address = stockLocation.address as Record<string, unknown> | undefined
+  if (address?.city_id) {
     try {
       const { data: [city] } = await query.graph({
         entity: 'city',
         fields: ['id', 'name', 'state_id', 'state.id', 'state.name'],
-        filters: { id: stockLocation.address.city_id }
+        filters: { id: address.city_id }
       })
       
       if (city) {
-        stockLocation.address.city_details = city
-        stockLocation.address.state_id = city.state_id
+        address.city_details = city
+        address.state_id = (city as { state_id?: string }).state_id
       }
     } catch (error) {
       console.error('Failed to fetch city details:', error)

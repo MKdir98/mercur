@@ -24,11 +24,9 @@ export const listSellerReturnShippingOptionsForOrderWorkflow = createWorkflow(
       const transformed = orderQuery.data[0]
 
       return {
-        cart_id: transformed.order_set.cart_id,
+        cart_id: transformed.order_set?.cart_id ?? '',
         is_return: true,
-        option_ids: transformed.seller.shipping_options.map(
-          (option) => option.id
-        )
+        option_ids: (transformed.seller?.shipping_options ?? []).filter(Boolean).map((option) => option!.id)
       }
     })
 

@@ -26,9 +26,9 @@ export const validateAttributeValueStep = createStep(
       }
     })
 
-    const allowedValues = attribute.possible_values?.map(
-      (posVal) => posVal.value
-    )
+    const allowedValues = (attribute.possible_values ?? []).map(
+      (posVal) => posVal?.value
+    ).filter(Boolean)
 
     if (allowedValues?.length && !allowedValues.includes(input.value)) {
       throw new MedusaError(
@@ -37,9 +37,9 @@ export const validateAttributeValueStep = createStep(
       )
     }
 
-    const attributeCategoryIds = attribute.product_categories.map(
-      (cat) => cat.id
-    )
+    const attributeCategoryIds = (attribute.product_categories ?? []).map(
+      (cat) => cat?.id
+    ).filter((id): id is string => id != null)
 
     // If all attributes are global, we don't enforce for product.categories to include the attribute.product_categories, since there are none
     if (attributeCategoryIds.length) {
@@ -53,7 +53,7 @@ export const validateAttributeValueStep = createStep(
         }
       })
 
-      const productCategoryIds = product.categories?.map((cat) => cat.id)
+      const productCategoryIds = (product.categories ?? []).map((cat) => cat?.id).filter((id): id is string => id != null)
       if (
         !productCategoryIds?.some((prodCatId) =>
           attributeCategoryIds.includes(prodCatId)

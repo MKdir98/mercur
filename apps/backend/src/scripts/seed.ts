@@ -55,7 +55,7 @@ export default async function seedMarketplaceData({ container }: ExecArgs) {
   const serviceZone = await createServiceZoneForFulfillmentSet(
     container,
     seller.id,
-    stockLocation.fulfillment_sets[0].id
+    (stockLocation.fulfillment_sets ?? [])[0]?.id ?? ''
   )
   logger.info('Creating seller shipping option...')
   await createSellerShippingOption(

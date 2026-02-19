@@ -45,9 +45,10 @@ export default async function sellerNewOrderHandler({
   }
 
   const customer_name = `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`
+  const orderWithDisplayId = order as { display_id?: number }
   await notificationService.createNotifications([
     {
-      to: order.seller?.id,
+      to: order.seller?.id ?? '',
       channel: 'seller_feed',
       template: 'seller_new_order_notification',
       data: {
@@ -60,7 +61,7 @@ export default async function sellerNewOrderHandler({
       channel: 'email',
       template: ResendNotificationTemplates.SELLER_NEW_ORDER,
       content: {
-        subject: `New order #${order.display_id} received`
+        subject: `New order #${orderWithDisplayId.display_id ?? order.id} received`
       },
       data: {
         data: {

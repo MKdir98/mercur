@@ -37,12 +37,16 @@ export default async function orderCreatedHandler({
     return
   }
 
+  const orderEmail = order.email ?? ''
+  if (!orderEmail) return
+
+  const orderWithDisplayId = order as { display_id?: number }
   await notificationService.createNotifications({
-    to: order.email,
+    to: orderEmail,
     channel: 'email',
     template: ResendNotificationTemplates.BUYER_NEW_ORDER,
     content: {
-      subject: `Order Confirmation - #${order.display_id}`
+      subject: `Order Confirmation - #${orderWithDisplayId.display_id ?? order.id}`
     },
     data: {
       data: {
@@ -54,7 +58,7 @@ export default async function orderCreatedHandler({
         ).toString(),
         order: {
           ...order,
-          display_id: order.display_id,
+          display_id: orderWithDisplayId.display_id ?? order.id,
           total: order.summary?.current_order_total || 0
         }
       }

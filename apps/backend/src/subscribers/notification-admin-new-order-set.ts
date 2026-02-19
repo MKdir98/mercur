@@ -21,7 +21,7 @@ export default async function newOrderSetAdminNotifyHandler({
     }
   })
 
-  if (!order_set || order_set.orders.length < 2) {
+  if (!order_set || !order_set.orders || order_set.orders.length < 2) {
     return
   }
 

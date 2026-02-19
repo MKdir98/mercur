@@ -19,7 +19,10 @@ createOrderShipmentWorkflow.hooks.shipmentCreated(
       }
     })
 
-    const order_id = fulfillment.order.id
+    const order_id = fulfillment.order?.id
+    if (!order_id) {
+      return
+    }
 
     const { result: order } = await getOrderDetailWorkflow.run({
       container,

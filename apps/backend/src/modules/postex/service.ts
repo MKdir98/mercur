@@ -297,7 +297,7 @@ class PostexService extends AbstractFulfillmentProviderService {
           entity: 'shipping_option',
           fields: ['id', 'provider_id'],
           filters: {
-            id: shippingMethod.shipping_option_id
+            id: shippingMethod.shipping_option_id ?? undefined
           }
         })
 
@@ -400,20 +400,21 @@ class PostexService extends AbstractFulfillmentProviderService {
       }
 
       const originCityCode = await getPostexCodeByName(
-        locationAddress.city,
-        locationAddress.province
+        locationAddress.city ?? '',
+        locationAddress.province ?? ''
       )
 
       const destinationCityCode = await getPostexCodeByName(
-        deliveryAddress.city,
-        deliveryAddress.province
+        deliveryAddress.city ?? '',
+        deliveryAddress.province ?? ''
       )
 
       if (!originCityCode || !destinationCityCode) {
         throw new Error('خطا در ثبت مرسوله پستکس: کد شهر مبدأ یا مقصد در سیستم پستکس یافت نشد')
       }
 
-      const parcels = await Promise.all(order.items.map(async (item) => {
+      const parcels = await Promise.all((order.items ?? []).filter(Boolean).map(async (itemRaw) => {
+        const item = itemRaw!
         let weight, length, width, height
         
         if (item.variant_id) {
@@ -473,15 +474,15 @@ class PostexService extends AbstractFulfillmentProviderService {
       const isValidPostalCode = (code: string) => code && code.length === 10
       
       let senderPostalCode = '0000000000'
-      if (isValidPostalCode(locationAddress.postal_code)) {
-        senderPostalCode = locationAddress.postal_code
+      if (isValidPostalCode(locationAddress.postal_code ?? '')) {
+        senderPostalCode = locationAddress.postal_code ?? '0000000000'
       } else if (isValidPostalCode(seller.postal_code)) {
         senderPostalCode = seller.postal_code
       }
       
       const receiverPhone = deliveryAddress.phone || '09000000000'
-      const receiverPostalCode = isValidPostalCode(deliveryAddress.postal_code) 
-        ? deliveryAddress.postal_code 
+      const receiverPostalCode = isValidPostalCode(deliveryAddress.postal_code ?? '') 
+        ? (deliveryAddress.postal_code ?? '0000000000') 
         : '0000000000'
 
       console.log('🔹 [POSTEX SERVICE] Postal codes:', {
