@@ -131,7 +131,6 @@ export const GET = async (
           .flatMap((item: any) => (item.inventory.location_levels))
           .reduce((sum: number, level: any) => sum + (Number(level.stocked_quantity)) - (Number(level.reserved_quantity)), 0)
 
-          console.log(inventoryQuantity);
         const basePrice = variant.prices?.[0]
         if (!basePrice) {
           return { ...variant, inventory_quantity: inventoryQuantity, calculated_price: null }

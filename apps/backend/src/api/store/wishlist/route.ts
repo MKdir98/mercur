@@ -9,7 +9,25 @@ import { calculateWishlistProductsPrice } from '@mercurjs/wishlist'
 
 import customerWishlist from '../../../links/customer-wishlist'
 import { createWishlistEntryWorkflow } from '../../../workflows/wishlist/workflows'
+import { storeWishlistFields } from './query-config'
 import { StoreCreateWishlistType } from './validators'
+
+function getCustomerIdFromRequest(req: AuthenticatedMedusaRequest): string | null {
+  const fromAuth = req.auth_context?.actor_id ?? (req as { auth?: { actor_id?: string } }).auth?.actor_id
+  if (fromAuth) return fromAuth
+
+  const authHeader = req.headers.authorization
+  if (!authHeader?.startsWith('Bearer ')) return null
+
+  const token = authHeader.replace('Bearer ', '')
+  if (!token.startsWith('cust_')) return null
+
+  const withoutPrefix = token.substring(5)
+  const lastUnderscoreIndex = withoutPrefix.lastIndexOf('_')
+  if (lastUnderscoreIndex <= 0) return null
+
+  return withoutPrefix.substring(0, lastUnderscoreIndex)
+}
 
 /**
  * @oas [post] /store/wishlist
@@ -63,21 +81,28 @@ export const POST = async (
   req: AuthenticatedMedusaRequest<StoreCreateWishlistType>,
   res: MedusaResponse
 ) => {
+  const customerId = getCustomerIdFromRequest(req)
+  if (!customerId) {
+    res.status(401).json({ message: 'Unauthorized' })
+    return
+  }
+
   const { result } = await createWishlistEntryWorkflow.run({
     container: req.scope,
     input: {
       ...req.validatedBody,
-      customer_id: req.auth_context.actor_id
+      customer_id: customerId
     }
   })
 
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+  const fields = req.queryConfig?.fields ?? storeWishlistFields
 
   const {
     data: [wishlist]
   } = await query.graph({
     entity: 'wishlist',
-    fields: req.queryConfig.fields,
+    fields,
     filters: {
       id: result.id
     }
@@ -143,18 +168,24 @@ export const GET = async (
   req: AuthenticatedMedusaRequest,
   res: MedusaResponse
 ) => {
+  const customerId = getCustomerIdFromRequest(req)
+  if (!customerId) {
+    res.status(401).json({ message: 'Unauthorized' })
+    return
+  }
+
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+  const fields = req.queryConfig?.fields ?? storeWishlistFields
+  const productFields = fields.map((field: string) => `wishlist.products.${field}`)
+  const pagination = req.queryConfig?.pagination ?? { skip: 0, take: 50 }
 
   const { data: wishlists, metadata } = await query.graph({
     entity: customerWishlist.entryPoint,
-    fields: [
-      ...req.queryConfig.fields.map((field) => `wishlist.products.${field}`),
-      'wishlist.products.variants.prices.*'
-    ],
+    fields: [...productFields, 'wishlist.products.variants.prices.*'],
     filters: {
-      customer_id: req.auth_context.actor_id
+      customer_id: customerId
     },
-    pagination: req.queryConfig.pagination
+    pagination
   })
 
   const formattedWithPrices = await calculateWishlistProductsPrice(

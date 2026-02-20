@@ -2,12 +2,15 @@ import { CartShippingMethodDTO } from '@medusajs/framework/types'
 import { createWorkflow, transform } from '@medusajs/framework/workflows-sdk'
 import {
   addShippingMethodToCartStep,
-  addShippingMethodToCartWorkflow,
+  refreshCartItemsWorkflow,
   useQueryGraphStep
 } from '@medusajs/medusa/core-flows'
 
 import sellerShippingOptionLink from '../../../links/seller-shipping-option'
-import { validateCartShippingOptionsStep } from '../steps'
+import {
+  addSellerShippingMethodDirectStep,
+  validateCartShippingOptionsStep
+} from '../steps'
 
 type AddSellerShippingMethodToCartWorkflowInput = {
   cart_id: string
@@ -20,9 +23,6 @@ type AddSellerShippingMethodToCartWorkflowInput = {
 export const addSellerShippingMethodToCartWorkflow = createWorkflow(
   'add-seller-shipping-method-to-cart',
   function (input: AddSellerShippingMethodToCartWorkflowInput) {
-    console.log('🔵 [WORKFLOW] add-seller-shipping-method-to-cart started')
-    console.log('🔵 [WORKFLOW] input:', JSON.stringify(input, null, 2))
-    
     const { data: carts } = useQueryGraphStep({
       entity: 'cart',
       filters: {
@@ -31,74 +31,37 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
       fields: ['id', 'shipping_methods.*'],
       options: { throwIfKeyNotFound: true }
     }).config({ name: 'cart-query' })
-    
-    const { data: shippingOptionDetails } = useQueryGraphStep({
-      entity: 'shipping_option',
-      filters: {
-        id: input.option.id
-      },
-      fields: ['id', 'name', 'price_type', 'provider_id', '*prices'],
-      options: { throwIfKeyNotFound: true }
-    }).config({ name: 'shipping-option-query' })
-    
-    const logShippingOption = transform(
-      { shippingOptionDetails },
-      ({ shippingOptionDetails: [shippingOption] }) => {
-        console.log('📦 [WORKFLOW] Shipping Option Details:')
-        console.log('📦 [WORKFLOW] ID:', shippingOption.id)
-        console.log('📦 [WORKFLOW] Name:', shippingOption.name)
-        console.log('📦 [WORKFLOW] Price Type:', shippingOption.price_type)
-        console.log('📦 [WORKFLOW] Provider ID:', shippingOption.provider_id)
-        console.log('📦 [WORKFLOW] Prices:', JSON.stringify((shippingOption as Record<string, unknown>).prices, null, 2))
-        return true
-      }
-    )
 
     const validateCartShippingOptionsInput = transform(
       { carts, option: input.option },
-      ({ carts: [cart], option }) => ({
-        cart_id: cart.id,
-        option_ids: [
-          // @ts-ignore excessive stack depth
-          ...(cart.shipping_methods ?? []).filter(Boolean).map((m) => m!.shipping_option_id),
-          option.id
-        ]
-      })
+      ({ carts: [cart], option }) => {
+        // @ts-expect-error excessive stack depth in WorkflowData transform
+        const methods = (cart.shipping_methods ?? []).filter(Boolean)
+        const optionIds = methods.map((m) => (m as { shipping_option_id: string }).shipping_option_id)
+        return {
+          cart_id: cart.id,
+          option_ids: [...optionIds, option.id]
+        }
+      }
     )
 
     validateCartShippingOptionsStep(validateCartShippingOptionsInput as any)
 
-    const addShippingMethodToCartInput = transform(
-      input,
-      ({ cart_id, option }) => {
-        console.log('🟠 [WORKFLOW] Preparing input for addShippingMethodToCartWorkflow')
-        console.log('🟠 [WORKFLOW] cart_id:', cart_id)
-        console.log('🟠 [WORKFLOW] option:', JSON.stringify(option, null, 2))
-        
-        const transformedInput = {
-          cart_id,
-          options: [
-            {
-              ...option,
-              data: {
-                ...option.data,
-                cart_id
-              }
-            }
-          ]
-        }
-        
-        console.log('🟠 [WORKFLOW] Transformed input:', JSON.stringify(transformedInput, null, 2))
-        return transformedInput
-      }
-    )
-
-    // default addShippingMethodToCartWorkflow will replace all existing shippings methods in the cart
-    console.log('🟠 [WORKFLOW] Calling addShippingMethodToCartWorkflow.runAsStep')
-    addShippingMethodToCartWorkflow.runAsStep({
-      input: addShippingMethodToCartInput
+    const addDirectResult = addSellerShippingMethodDirectStep({
+      cart_id: input.cart_id,
+      option_id: input.option.id,
+      option_data: input.option.data
     })
-    console.log('🟠 [WORKFLOW] addShippingMethodToCartWorkflow.runAsStep completed')
+
+    refreshCartItemsWorkflow.runAsStep({
+      input: transform(
+        { addDirectResult, input },
+        ({ addDirectResult, input }) => ({
+          cart_id: input.cart_id,
+          shipping_methods: addDirectResult?.createdMethodIds ?? []
+        })
+      )
+    })
 
     const shippingOptions = transform(
       { carts, newShippingOption: input.option },

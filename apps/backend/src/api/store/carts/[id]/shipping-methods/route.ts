@@ -14,11 +14,6 @@ export const POST = async (
 ) => {
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
 
-  console.log('🔴 [API] POST /carts/:id/shipping-methods called')
-  console.log('🔴 [API] cart_id:', req.params.id)
-  console.log('🔴 [API] option_id:', req.validatedBody.option_id)
-  console.log('🔴 [API] data:', req.validatedBody.data)
-
   await addSellerShippingMethodToCartWorkflow(req.scope).run({
     input: {
       cart_id: req.params.id,
@@ -28,8 +23,6 @@ export const POST = async (
       }
     }
   })
-  
-  console.log('🔴 [API] Workflow completed successfully')
 
   const {
     data: [cart]

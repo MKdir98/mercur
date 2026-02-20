@@ -47,6 +47,10 @@ export const storeMiddlewares: MiddlewareRoute[] = [
     middlewares: [bypassAuthInLocalDemo]
   },
   {
+    matcher: '/store/seller*',
+    middlewares: [bypassAuthInLocalDemo]
+  },
+  {
     matcher: '/store/popular-products',
     middlewares: [bypassAuthInLocalDemo]
   },
