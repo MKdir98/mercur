@@ -5,8 +5,12 @@ class PostexService extends AbstractFulfillmentProviderService {
   static identifier = "postex"
   static LIFE_TIME = "SCOPED"
 
-  static setGlobalContainer(_container: unknown) {}
-  
+  private static globalContainer_: any = null
+
+  static setGlobalContainer(container: unknown) {
+    PostexService.globalContainer_ = container
+  }
+
   protected container_: any
   protected options_: any
   protected manager_: any
@@ -16,6 +20,10 @@ class PostexService extends AbstractFulfillmentProviderService {
     this.container_ = container
     this.options_ = options
     this.manager_ = null
+  }
+
+  private getDbContainer() {
+    return PostexService.globalContainer_ || this.container_
   }
 
   getManager() {
@@ -75,7 +83,7 @@ class PostexService extends AbstractFulfillmentProviderService {
       const locationAddress = fromLocation.address
 
       // 4. Get Postex codes from city table using knex
-      const knex = this.container_.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+      const knex = this.getDbContainer().resolve(ContainerRegistrationKeys.PG_CONNECTION)
       
       if (!knex) {
         throw new Error('خطا در استعلام هزینه ارسال: سرویس پایگاه داده در دسترس نیست')
@@ -224,8 +232,8 @@ class PostexService extends AbstractFulfillmentProviderService {
 
   async createPostexShipment(orderId: string, fulfillmentId: string, locationId?: string) {
     try {
-      const query = this.container_.resolve(ContainerRegistrationKeys.QUERY)
-      const knex = this.container_.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+      const query = this.getDbContainer().resolve(ContainerRegistrationKeys.QUERY)
+      const knex = this.getDbContainer().resolve(ContainerRegistrationKeys.PG_CONNECTION)
       
       if (!knex) {
         throw new Error('خطا در ثبت مرسوله پستکس: سرویس پایگاه داده در دسترس نیست')
@@ -303,7 +311,7 @@ class PostexService extends AbstractFulfillmentProviderService {
 
       console.log('🔹 [POSTEX SERVICE] Using location ID:', locationId)
 
-      const stockLocationModule = this.container_.resolve(Modules.STOCK_LOCATION)
+      const stockLocationModule = this.getDbContainer().resolve(Modules.STOCK_LOCATION)
       const stockLocation = await stockLocationModule.retrieveStockLocation(locationId, {
         relations: ['address']
       })
@@ -614,7 +622,7 @@ class PostexService extends AbstractFulfillmentProviderService {
 
   async canCancelFulfillment(fulfillmentId: string): Promise<boolean> {
     try {
-      const knex = this.container_.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+      const knex = this.getDbContainer().resolve(ContainerRegistrationKeys.PG_CONNECTION)
       
       if (!knex) {
         console.warn('⚠️ [POSTEX SERVICE] Knex not available for canCancelFulfillment')

@@ -55,11 +55,8 @@ export const deleteSellerLineItemWorkflow = createWorkflow(
 
         if (!optionIdToRemove) return []
 
-        const methods = cart.shipping_methods ?? []
-        const foundMethod = methods.find((m) => {
-          const method = m as { shipping_option_id?: string } | null | undefined
-          return method?.shipping_option_id === optionIdToRemove
-        }) as { id: string } | undefined
+        const methods = ((cart as any).shipping_methods ?? []) as Array<{ id: string; shipping_option_id?: string }>
+        const foundMethod = methods.find((m) => m?.shipping_option_id === optionIdToRemove)
         const methodId = foundMethod?.id
         if (!methodId) return []
         return [methodId]

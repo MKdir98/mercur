@@ -1,25 +1,40 @@
 interface EmailTemplateProps {
-  data: {
-    order: {
-      id: string,
-      display_id: number | string,
-      items: any[],
-      customer: {
-        first_name: string,
-        last_name: string,
-        id: string
+  data?: {
+    data?: {
+      order?: {
+        id?: string,
+        display_id?: number | string,
+        items?: any[],
+        customer?: {
+          first_name?: string,
+          last_name?: string,
+          id?: string
+        },
+        seller?: {
+          email?: string,
+          name?: string,
+          id?: string
+        }
       },
-      seller: {
-        email: string,
-        name: string,
-        id: string
-      }
-    }
+      customer_name?: string
+    },
+    order?: {
+      id?: string,
+      display_id?: number | string,
+      items?: any[],
+      customer?: { first_name?: string; last_name?: string; id?: string },
+      seller?: { email?: string; name?: string; id?: string }
+    },
+    customer_name?: string
   }
 }
 
 export const SellerNewOrderEmailTemplate: React.FC<Readonly<EmailTemplateProps>> = ({ data }) => {
-  const { order } = data;
+  const templateData = data?.data ?? data
+  const order = templateData?.order ?? (data as any)?.order ?? {}
+  const customerNameRaw = `${order?.customer?.first_name ?? ''} ${order?.customer?.last_name ?? ''}`.trim()
+  const customerName = (templateData as any)?.customer_name ?? (data as any)?.customer_name ?? (customerNameRaw ? customerNameRaw : 'Customer')
+  const sellerName = order?.seller?.name ?? 'Seller'
 
   return (
     <div style={{
@@ -32,12 +47,12 @@ export const SellerNewOrderEmailTemplate: React.FC<Readonly<EmailTemplateProps>>
       borderRadius: 10
     }}>
       <h1 style={{ fontSize: '2rem', marginBottom: 8 }}>
-        Hello, {order.seller.name}!
+        Hello, {sellerName}!
         <br />
         You have received a new order!
       </h1>
       <p style={{ fontSize: '1.1rem', marginBottom: 24 }}>
-        Order <b>#{order.display_id}</b> has just been placed by {order.customer.first_name} {order.customer.last_name}.
+        Order <b>#{order.display_id ?? order.id}</b> has just been placed by {customerName}.
       </p>
       <h3 style={{ marginTop: 32, marginBottom: 12 }}>Order items:</h3>
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 32 }}>
@@ -50,7 +65,7 @@ export const SellerNewOrderEmailTemplate: React.FC<Readonly<EmailTemplateProps>>
           </tr>
         </thead>
         <tbody>
-          {order.items.map((item: any, idx: number) => (
+          {(order.items ?? []).map((item: any, idx: number) => (
             <tr key={item.id || idx} style={{ borderBottom: '1px solid #f3f3f3' }}>
               <td style={{ padding: '12px 8px', verticalAlign: 'top' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>

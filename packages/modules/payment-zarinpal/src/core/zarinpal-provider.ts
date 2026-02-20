@@ -100,10 +100,10 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
   async initiatePayment(
     input: InitiatePaymentInput
   ): Promise<InitiatePaymentOutput> {
-    const { amount, currency_code, context } = input
+    const { amount, currency_code, context, data } = input
 
-    const contextData = context as any
-    const callbackUrl = contextData?.callback_url || process.env.ZARINPAL_CALLBACK_URL
+    const providerData = (data || context) as Record<string, unknown>
+    const callbackUrl = (providerData?.callback_url as string) || process.env.ZARINPAL_CALLBACK_URL
 
     if (!callbackUrl) {
       throw new MedusaError(
@@ -120,10 +120,10 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
         {
           merchant_id: this.options_.merchantId,
           amount: Math.round(numericAmount * 10),
-          description: contextData?.description || 'پرداخت سفارش',
+          description: (providerData?.description as string) || 'پرداخت سفارش',
           callback_url: callbackUrl,
           metadata: {
-            cart_id: contextData?.cart_id,
+            cart_id: providerData?.cart_id,
             customer_id: context?.customer?.id,
             email: context?.customer?.email,
           },

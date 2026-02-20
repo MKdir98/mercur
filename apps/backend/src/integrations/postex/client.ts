@@ -164,7 +164,7 @@ export class PostexClient {
 
   getDefaultParcel() {
     return {
-      weight_kg: 0.5,
+      weight_kg: 500,
       length_cm: 20,
       width_cm: 15,
       height_cm: 10
@@ -206,7 +206,7 @@ export class PostexClient {
             length: Math.round(parcel.length_cm),
             width: Math.round(parcel.width_cm),
             height: Math.round(parcel.height_cm),
-            total_weight: Math.round(parcel.weight_kg * 1000),
+            total_weight: Math.round(parcel.weight_kg),
             is_fragile: false,
             is_liquid: false,
             total_value: parcel.total_value,
@@ -356,7 +356,7 @@ export class PostexClient {
             length: Math.round(parcel.length_cm),
             width: Math.round(parcel.width_cm),
             height: Math.round(parcel.height_cm),
-            total_weight: Math.round(parcel.weight_kg * 1000),
+            total_weight: Math.round(parcel.weight_kg),
             is_fragile: false,
             is_liquid: false,
             total_value: parcel.total_value,

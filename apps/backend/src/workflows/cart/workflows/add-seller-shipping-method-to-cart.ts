@@ -2,7 +2,6 @@ import { CartShippingMethodDTO } from '@medusajs/framework/types'
 import { createWorkflow, transform } from '@medusajs/framework/workflows-sdk'
 import {
   addShippingMethodToCartStep,
-  refreshCartItemsWorkflow,
   useQueryGraphStep
 } from '@medusajs/medusa/core-flows'
 
@@ -35,9 +34,8 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
     const validateCartShippingOptionsInput = transform(
       { carts, option: input.option },
       ({ carts: [cart], option }) => {
-        // @ts-expect-error excessive stack depth in WorkflowData transform
-        const methods = (cart.shipping_methods ?? []).filter(Boolean)
-        const optionIds = methods.map((m) => (m as { shipping_option_id: string }).shipping_option_id)
+        const methods = ((cart as any).shipping_methods ?? []).filter(Boolean) as Array<{ shipping_option_id: string }>
+        const optionIds = methods.map((m) => m.shipping_option_id)
         return {
           cart_id: cart.id,
           option_ids: [...optionIds, option.id]
@@ -53,23 +51,11 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
       option_data: input.option.data
     })
 
-    refreshCartItemsWorkflow.runAsStep({
-      input: transform(
-        { addDirectResult, input },
-        ({ addDirectResult, input }) => ({
-          cart_id: input.cart_id,
-          shipping_methods: addDirectResult?.createdMethodIds ?? []
-        })
-      )
-    })
-
     const shippingOptions = transform(
       { carts, newShippingOption: input.option },
       ({ carts: [cart], newShippingOption }) => {
-        return [
-          ...(cart.shipping_methods ?? []).filter(Boolean).map((sm) => sm!.shipping_option_id),
-          newShippingOption.id
-        ]
+        const methods = ((cart as any).shipping_methods ?? []).filter(Boolean) as Array<{ shipping_option_id: string }>
+        return [...methods.map((sm) => sm.shipping_option_id), newShippingOption.id]
       }
     )
 
@@ -96,7 +82,8 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
           CartShippingMethodDTO
         >()
 
-        for (const method of cart.shipping_methods ?? []) {
+        const cartMethods = ((cart as any).shipping_methods ?? []) as CartShippingMethodDTO[]
+        for (const method of cartMethods) {
           if (!method) continue
           const sellerId = shippingOptionToSellerMap.get(
             method.shipping_option_id
@@ -108,8 +95,6 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
           newShippingOption.id
         )!
 
-        // Remove any existing shipping method for the same seller
-        // since we're replacing it with the new option
         if (existingShippingMethodsBySeller.has(newOptionSellerId)) {
           existingShippingMethodsBySeller.delete(newOptionSellerId)
         }
