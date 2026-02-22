@@ -36,23 +36,6 @@ type Options = {
   sandbox: boolean
 }
 
-interface RequestPaymentResponse {
-  code: number
-  message: string
-  authority?: string
-  fee_type?: string
-  fee?: number
-}
-
-interface VerifyPaymentResponse {
-  code: number
-  message: string
-  card_hash?: string
-  card_pan?: string
-  ref_id?: number
-  fee_type?: string
-  fee?: number
-}
 
 abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
   protected readonly options_: Options
@@ -114,20 +97,32 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
 
     const numericAmount = typeof amount === 'number' ? amount : parseFloat(amount as any)
 
+    console.log('🟡 [Zarinpal] Initiating payment:', {
+      merchantId: this.options_.merchantId,
+      amount: numericAmount,
+      amountInRials: Math.round(numericAmount * 10),
+      callbackUrl,
+      baseUrl: this.baseUrl
+    })
+
     try {
-      const response = await axios.post<RequestPaymentResponse>(
-        `${this.baseUrl}/request.json`,
-        {
-          merchant_id: this.options_.merchantId,
-          amount: Math.round(numericAmount * 10),
-          description: (providerData?.description as string) || 'پرداخت سفارش',
-          callback_url: callbackUrl,
-          metadata: {
-            cart_id: providerData?.cart_id,
-            customer_id: context?.customer?.id,
-            email: context?.customer?.email,
-          },
+      const requestBody = {
+        merchant_id: this.options_.merchantId,
+        amount: Math.round(numericAmount * 10),
+        description: (providerData?.description as string) || 'پرداخت سفارش',
+        callback_url: callbackUrl,
+        metadata: {
+          cart_id: providerData?.cart_id,
+          customer_id: context?.customer?.id,
+          email: context?.customer?.email,
         },
+      }
+
+      console.log('🟡 [Zarinpal] Request body:', requestBody)
+
+      const response = await axios.post<any>(
+        `${this.baseUrl}/request.json`,
+        requestBody,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -135,24 +130,38 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
         }
       )
 
-      if (response.data.code !== 100 || !response.data.authority) {
-        throw new Error(`Zarinpal request failed: ${response.data.message}`)
+      console.log('🟡 [Zarinpal] Response:', response.data)
+
+      const zarinpalData = response.data.data || response.data
+      const code = zarinpalData.code
+      const authority = zarinpalData.authority
+
+      if (code !== 100 || !authority) {
+        console.error('❌ [Zarinpal] Request failed:', response.data)
+        throw new Error(`Zarinpal request failed: ${zarinpalData.message || JSON.stringify(response.data)}`)
       }
 
+      console.log('✅ [Zarinpal] Payment initiated successfully:', authority)
+
       const paymentData = {
-        id: response.data.authority,
-        authority: response.data.authority,
+        id: authority,
+        authority: authority,
         amount,
         currency_code,
         status: 'pending',
-        payment_url: `${this.paymentGatewayUrl}/${response.data.authority}`,
+        payment_url: `${this.paymentGatewayUrl}/${authority}`,
       }
 
       return {
-        id: response.data.authority,
+        id: authority,
         data: paymentData,
       }
     } catch (error: any) {
+      console.error('❌ [Zarinpal] Exception in initiatePayment:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      })
       throw this.buildError(
         'An error occurred in initiatePayment',
         error
@@ -165,14 +174,68 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
   ): Promise<AuthorizePaymentOutput> {
     const paymentData = data.data as Record<string, unknown>
     
-    if (paymentData.status === 'verified') {
+    console.log('🟡 [Zarinpal] authorizePayment called with data:', paymentData)
+    
+    if (paymentData.status === 'authorized' || paymentData.status === 'verified') {
+      console.log('✅ [Zarinpal] Payment already authorized/verified')
       return { 
         status: PaymentSessionStatus.AUTHORIZED, 
         data: { ...paymentData, status: 'authorized' } 
       }
     }
 
-    return { status: PaymentSessionStatus.PENDING, data: paymentData }
+    const authority = paymentData.authority as string
+    if (!authority) {
+      console.error('❌ [Zarinpal] No authority in payment data')
+      return { status: PaymentSessionStatus.ERROR, data: paymentData }
+    }
+
+    console.log('🟡 [Zarinpal] Verifying payment with authority:', authority)
+    
+    try {
+      const amountValue = Number(paymentData.amount) || 0
+      const response = await axios.post<any>(
+        `${this.baseUrl}/verify.json`,
+        {
+          merchant_id: this.options_.merchantId,
+          authority,
+          amount: Math.round(amountValue * 10),
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+
+      const zarinpalData = response.data.data || response.data
+      const code = zarinpalData.code
+
+      console.log('🟡 [Zarinpal] Verify response:', zarinpalData)
+
+      if (code === 100 || code === 101) {
+        console.log('✅ [Zarinpal] Payment verified successfully')
+        return {
+          status: PaymentSessionStatus.AUTHORIZED,
+          data: {
+            ...paymentData,
+            status: 'authorized',
+            ref_id: zarinpalData.ref_id?.toString(),
+            card_pan: zarinpalData.card_pan,
+            card_hash: zarinpalData.card_hash,
+          },
+        }
+      } else {
+        console.error('❌ [Zarinpal] Verification failed:', zarinpalData)
+        return { 
+          status: PaymentSessionStatus.ERROR, 
+          data: { ...paymentData, error: zarinpalData.message } 
+        }
+      }
+    } catch (error: any) {
+      console.error('❌ [Zarinpal] Exception in authorizePayment:', error.message)
+      return { status: PaymentSessionStatus.ERROR, data: paymentData }
+    }
   }
 
   async cancelPayment({
@@ -200,7 +263,7 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
 
     try {
       const amountValue = Number(paymentSessionData?.amount) || 0
-      const response = await axios.post<VerifyPaymentResponse>(
+      const response = await axios.post<any>(
         `${this.baseUrl}/verify.json`,
         {
           merchant_id: this.options_.merchantId,
@@ -214,18 +277,21 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
         }
       )
 
-      if (response.data.code === 100 || response.data.code === 101) {
+      const zarinpalData = response.data.data || response.data
+      const code = zarinpalData.code
+
+      if (code === 100 || code === 101) {
         return {
           data: {
             ...paymentSessionData,
             status: 'verified',
-            ref_id: response.data.ref_id?.toString(),
-            card_pan: response.data.card_pan,
-            card_hash: response.data.card_hash,
+            ref_id: zarinpalData.ref_id?.toString(),
+            card_pan: zarinpalData.card_pan,
+            card_hash: zarinpalData.card_hash,
           },
         }
       } else {
-        throw new Error(`Verification failed: ${response.data.message}`)
+        throw new Error(`Verification failed: ${zarinpalData.message}`)
       }
     } catch (error: any) {
       throw this.buildError('An error occurred in capturePayment', error)
