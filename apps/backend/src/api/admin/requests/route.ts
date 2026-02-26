@@ -1,6 +1,8 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 
+import { adminRequestsFields } from './query-config'
+
 /**
  * @oas [get] /admin/requests
  * operationId: "AdminListRequests"
@@ -70,15 +72,18 @@ export async function GET(
   res: MedusaResponse
 ): Promise<void> {
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+  const fields = req.queryConfig?.fields ?? adminRequestsFields
+  const pagination = req.queryConfig?.pagination ?? { skip: 0, take: 50 }
+  const filterableFields = req.filterableFields ?? {}
 
   const { data: requests, metadata } = await query.graph({
     entity: 'request',
-    fields: req.queryConfig.fields,
+    fields,
     filters: {
-      ...req.filterableFields,
-      status: req.filterableFields.status || { $ne: 'draft' }
+      ...filterableFields,
+      status: filterableFields.status || { $ne: 'draft' }
     },
-    pagination: req.queryConfig.pagination
+    pagination
   })
 
   res.json({

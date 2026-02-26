@@ -81,34 +81,63 @@ export const POST = async (
   req: AuthenticatedMedusaRequest<StoreCreateWishlistType>,
   res: MedusaResponse
 ) => {
+  const logger = req.scope.resolve(ContainerRegistrationKeys.LOGGER) as { info: (msg: string, meta?: object) => void; warn: (msg: string, meta?: object) => void; error: (msg: string, meta?: object) => void }
   const customerId = getCustomerIdFromRequest(req)
   if (!customerId) {
+    logger.warn('[WishlistPOST] 401 Unauthorized - no customerId', {
+      authContext: req.auth_context,
+      hasAuthHeader: !!req.headers.authorization
+    })
     res.status(401).json({ message: 'Unauthorized' })
     return
   }
 
-  const { result } = await createWishlistEntryWorkflow.run({
-    container: req.scope,
-    input: {
-      ...req.validatedBody,
-      customer_id: customerId
-    }
-  })
+  const input = {
+    ...req.validatedBody,
+    customer_id: customerId
+  }
+  if (!input.reference_id) {
+    logger.warn('[WishlistPOST] 400 Bad Request - reference_id missing', {
+      validatedBody: req.validatedBody,
+      input
+    })
+    res.status(400).json({
+      message: 'reference_id is required',
+      type: 'invalid_data'
+    })
+    return
+  }
 
-  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
-  const fields = req.queryConfig?.fields ?? storeWishlistFields
+  logger.info('[WishlistPOST] Creating wishlist entry', { customerId, reference_id: input.reference_id, reference: input.reference })
+  try {
+    const { result } = await createWishlistEntryWorkflow.run({
+      container: req.scope,
+      input
+    })
 
-  const {
-    data: [wishlist]
-  } = await query.graph({
-    entity: 'wishlist',
-    fields,
-    filters: {
-      id: result.id
-    }
-  })
+    const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+    const fields = req.queryConfig?.fields ?? storeWishlistFields
 
-  res.status(201).json({ wishlist })
+    const {
+      data: [wishlist]
+    } = await query.graph({
+      entity: 'wishlist',
+      fields,
+      filters: {
+        id: result.id
+      }
+    })
+
+    logger.info('[WishlistPOST] Wishlist entry created successfully', { wishlistId: result.id })
+    res.status(201).json({ wishlist })
+  } catch (err) {
+    logger.error('[WishlistPOST] Workflow failed', {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      input
+    })
+    throw err
+  }
 }
 
 /**

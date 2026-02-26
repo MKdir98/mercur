@@ -26,3 +26,4 @@ build
 !.yarn/versions
 
 .medusa
+logs

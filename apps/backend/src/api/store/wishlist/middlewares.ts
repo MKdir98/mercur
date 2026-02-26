@@ -3,6 +3,7 @@ import {
   validateAndTransformBody,
   validateAndTransformQuery
 } from '@medusajs/framework'
+import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 import { MiddlewareRoute } from '@medusajs/medusa'
 
 import customerWishlist from '../../../links/customer-wishlist'
@@ -55,6 +56,25 @@ function requireWishlistAuth(
   res.status(401).json({ message: 'Unauthorized' })
 }
 
+function logWishlistPostRequest(
+  req: MedusaRequest,
+  _res: MedusaResponse,
+  next: MedusaNextFunction
+) {
+  const body = (req as { body?: unknown }).body
+  const authContext = (req as { auth_context?: { actor_id: string; actor_type: string } }).auth_context
+  const hasAuthHeader = !!req.headers.authorization
+  const logger = req.scope.resolve(ContainerRegistrationKeys.LOGGER) as { info: (msg: string, meta?: object) => void; warn: (msg: string, meta?: object) => void }
+  logger.info('[WishlistPOST] Incoming request', {
+    body,
+    bodyType: typeof body,
+    authContext: authContext ?? null,
+    hasAuthHeader,
+    contentType: req.headers['content-type']
+  })
+  next()
+}
+
 export const storeWishlistMiddlewares: MiddlewareRoute[] = [
   {
     method: ['GET'],
@@ -72,12 +92,9 @@ export const storeWishlistMiddlewares: MiddlewareRoute[] = [
     method: ['POST'],
     matcher: '/store/wishlist',
     middlewares: [
+      logWishlistPostRequest,
       resolveCustomTokenAuth,
       requireWishlistAuth,
-      validateAndTransformQuery(
-        StoreGetWishlistsParams,
-        storeWishlistQueryConfig.retrieve
-      ),
       validateAndTransformBody(StoreCreateWishlist)
     ]
   },

@@ -5,6 +5,7 @@ import {
 } from '@medusajs/framework/utils'
 
 import { getRequestWorkflowByType } from '../../../../workflows/requests/utils/select-workflow'
+import { adminRequestsFields } from '../query-config'
 import { updateRequestWorkflow } from '../../../../workflows/requests/workflows'
 import { AdminReviewRequestType } from '../validators'
 
@@ -69,12 +70,20 @@ export async function POST(
     )
   }
 
-  if (req.validatedBody.status === 'rejected') {
+  const body = req.validatedBody ?? req.body
+  if (!body?.status) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      'Request body must include status (accepted or rejected) and reviewer_note'
+    )
+  }
+
+  if (body.status === 'rejected') {
     await updateRequestWorkflow.run({
       input: {
         id: req.params.id,
         reviewer_id: req.auth_context.actor_id,
-        ...req.validatedBody
+        ...body
       },
       container: req.scope
     })
@@ -99,7 +108,7 @@ export async function POST(
       id: req.params.id,
       reviewer_id: req.auth_context.actor_id,
       data: request.data,
-      ...req.validatedBody
+      ...body
     },
     throwOnError: true
   })
@@ -152,12 +161,13 @@ export async function GET(
   res: MedusaResponse
 ): Promise<void> {
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+  const fields = req.queryConfig?.fields ?? adminRequestsFields
 
   const {
     data: [request]
   } = await query.graph({
     entity: 'request',
-    fields: req.queryConfig.fields,
+    fields,
     filters: {
       id: req.params.id
     }

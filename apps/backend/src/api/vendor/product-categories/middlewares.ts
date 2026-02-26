@@ -15,7 +15,7 @@ export const vendorProductCategoriesMiddlewares: MiddlewareRoute[] = [
     ]
   },
   {
-    method: ['GET'],
+    method: ['GET', 'PATCH'],
     matcher: '/vendor/product-categories/:id',
     middlewares: [
       validateAndTransformQuery(

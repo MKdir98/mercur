@@ -47,7 +47,8 @@ export const useProductCategories = (
     queryKey: productCategoryQueryKeys.list(query),
     queryFn: () =>
       mercurQuery(`/admin/product-categories`, {
-        method: 'GET'
+        method: 'GET',
+        query: query as Record<string, string | number> | undefined
       }),
     ...options
   })

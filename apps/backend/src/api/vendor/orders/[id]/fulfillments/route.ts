@@ -51,7 +51,7 @@ export const POST = async (
     data: [order]
   } = await query.graph({
     entity: 'order',
-    fields: ['id', 'shipping_methods.shipping_option_id'],
+    fields: ['id', 'shipping_total', 'shipping_methods.shipping_option_id'],
     filters: {
       id
     }
@@ -70,8 +70,9 @@ export const POST = async (
   let postexShipmentData: any = null
 
   if (providerId?.includes('postex')) {
-    console.log('🔹 [CREATE FULFILLMENT] Postex provider detected, registering shipment BEFORE fulfillment creation')
-    console.log('🔹 [CREATE FULFILLMENT] Request body:', JSON.stringify(req.validatedBody, null, 2))
+
+    const blockRef = `postex_${id}_${Date.now()}`
+
 
     try {
       const postexConfig = {
@@ -84,10 +85,13 @@ export const POST = async (
       const tempFulfillmentId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       const locationId = req.validatedBody.location_id
       
+      const knex = req.scope.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+      const stockLocationModule = req.scope.resolve(Modules.STOCK_LOCATION)
       postexShipmentData = await postexService.createPostexShipment(
         id,
         tempFulfillmentId,
-        locationId
+        locationId,
+        { query, knex, stockLocationModule, isBulk: false }
       )
 
       console.log('✅ [CREATE FULFILLMENT] Postex shipment registered successfully', {
@@ -110,16 +114,63 @@ export const POST = async (
     })
   }
 
-  const { result: fulfillment } = await createOrderFulfillmentWorkflow(
-    req.scope
-  ).run({
-    input: {
-      order_id: id,
-      created_by: req.auth_context.actor_id,
-      ...req.validatedBody
-    },
-    throwOnError: true
+  const workflowInput = {
+    order_id: id,
+    created_by: req.auth_context.actor_id,
+    ...req.validatedBody
+  }
+  console.log('🔹 [CREATE FULFILLMENT] Workflow input', {
+    order_id: workflowInput.order_id,
+    location_id: workflowInput.location_id,
+    requires_shipping: workflowInput.requires_shipping,
+    items_count: workflowInput.items?.length ?? 0,
+    items: workflowInput.items
   })
+
+  if (!workflowInput.items?.length) {
+    console.warn('⚠️ [CREATE FULFILLMENT] No items in payload - checking order items')
+    const { data: [orderWithItems] } = await query.graph({
+      entity: 'order',
+      fields: [
+        'items.id',
+        'items.quantity',
+        'items.detail.fulfilled_quantity',
+        'items.requires_shipping',
+        'items.variant.product.shipping_profile.id'
+      ],
+      filters: { id }
+    })
+    console.log('🔹 [CREATE FULFILLMENT] Order items for comparison', {
+      order_items: orderWithItems?.items?.map((i: any) => ({
+        id: i.id,
+        quantity: i.quantity,
+        fulfilled: i.detail?.fulfilled_quantity,
+        requires_shipping: i.requires_shipping,
+        shipping_profile_id: i.variant?.product?.shipping_profile?.id
+      }))
+    })
+  }
+
+  let fulfillment
+  try {
+    const workflowResult = await createOrderFulfillmentWorkflow(
+      req.scope
+    ).run({
+      input: workflowInput,
+      throwOnError: true
+    })
+    fulfillment = workflowResult.result
+  } catch (error: any) {
+    console.error('❌ [CREATE FULFILLMENT] Workflow error', {
+      message: error.message,
+      stack: error.stack,
+      order_id: id,
+      items_sent: workflowInput.items?.length
+    })
+    return res.status(400).json({
+      message: error.message || 'خطا در ایجاد fulfillment'
+    })
+  }
 
   if (postexShipmentData) {
     try {
@@ -135,11 +186,12 @@ export const POST = async (
         [fulfillment.id, id]
       )
 
+      const labelUrl = `/vendor/orders/${id}/fulfillments/${fulfillment.id}/postex-label`
       await fulfillmentModule.updateFulfillment(fulfillment.id, {
         labels: [{
           tracking_number: postexShipmentData.tracking_number,
           tracking_url: postexShipmentData.tracking_url,
-          label_url: postexShipmentData.label_url
+          label_url: labelUrl
         }]
       })
 

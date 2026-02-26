@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios'
 import { PostexParcelDetailResponse } from './types'
+import { logPostexError, logPostexRequest, logPostexResponse } from './logger'
 
 interface PostexOptions {
   apiKey?: string
@@ -217,15 +218,12 @@ export class PostexClient {
         }))
       }
 
-      console.log('🔹 [POSTEX CLIENT] Calling shipping quotes API')
-      console.log('🔹 [POSTEX CLIENT] Request:', JSON.stringify(requestBody, null, 2))
+      const endpoint = '/api/v1/shipping/quotes'
+      logPostexRequest(endpoint, requestBody)
 
-      const response = await this.client.post<ShippingQuoteResponse>(
-        '/api/v1/shipping/quotes',
-        requestBody
-      )
+      const response = await this.client.post<ShippingQuoteResponse>(endpoint, requestBody)
 
-      console.log('🔹 [POSTEX CLIENT] Response:', JSON.stringify(response.data, null, 2))
+      logPostexResponse(endpoint, response.data)
 
       if (response.data?.shipping_prices?.[0]?.service_price?.[0]?.totalPrice) {
         const price = response.data.shipping_prices[0].service_price[0].totalPrice
@@ -247,20 +245,12 @@ export class PostexClient {
       return null
 
     } catch (error) {
-      console.error('❌ [POSTEX CLIENT] Error calling API')
-      console.error('❌ [POSTEX CLIENT] Status:', error.response?.status)
-      console.error('❌ [POSTEX CLIENT] Message:', error.response?.data?.message)
-      
-      if (error.response?.data?.invalid_fields) {
-        console.error('❌ [POSTEX CLIENT] Invalid fields:')
-        console.error(JSON.stringify(error.response.data.invalid_fields, null, 2))
-      }
-      
-      if (error.response?.data) {
-        console.error('❌ [POSTEX CLIENT] Full response data:')
-        console.error(JSON.stringify(error.response.data, null, 2))
-      }
-      
+      logPostexError('/api/v1/shipping/quotes', {
+        status: error.response?.status,
+        message: error.response?.data?.message,
+        invalid_fields: error.response?.data?.invalid_fields,
+        data: error.response?.data
+      })
       throw error
     }
   }
@@ -293,6 +283,68 @@ export class PostexClient {
     parcel_id: string
   } | null> {
     try {
+      const isProduction = process.env.NODE_ENV === 'production'
+      if (!isProduction) {
+        const mockResponse = {
+          order_no: 707075,
+          pick_up_price: 0,
+          shipping_price: 485936,
+          total_price: 485936,
+          result: [{
+            isSuccess: true,
+            data: {
+              sequence_number: 1,
+              parcel_no: 1613499993813,
+              custom_order_no: null,
+              custom_reference_no: null,
+              is_oversized: false,
+              shipments: [{
+                step: 1,
+                courier: {
+                  paymentType: null,
+                  paymentName: null,
+                  courierServiceName: null,
+                  courierCode: null,
+                  courierName: 'IR_POST',
+                  courierServiceCode: 'EXPRESS',
+                  days: null,
+                  slaHours: 0
+                },
+                tracking: {
+                  barcode: '210160434305978670000147',
+                  tracking_number: '210160434305978670000147',
+                  tracking_url: 'https://postex.ir/service/rahgiri?barcode=**********'
+                },
+                shipping_rate: {
+                  currency: 'IRR',
+                  discount: 60874,
+                  vat: 0,
+                  amount: 395736,
+                  vas_amount: 90200,
+                  total_amount: 485936,
+                  pre_discount_amount: 546810
+                },
+                is_duplicated: false,
+                created_at: '2026-02-26T15:38:58.8385212+03:30'
+              }],
+              order_id: 707075
+            }
+          }],
+          jobID: null,
+          createdAt: null
+        }
+        const endpoint = '/api/v1/parcels/bulk'
+        logPostexRequest(endpoint, params)
+        logPostexResponse(endpoint, mockResponse)
+        const result = mockResponse.result[0]
+        const parcelNo = result.data.parcel_no
+        const tracking = result.data.shipments[0].tracking
+        return {
+          tracking_code: tracking.tracking_number,
+          parcel_id: parcelNo.toString()
+        }
+      }
+
       if (!this.options.apiKey) {
         console.warn('⚠️  [POSTEX CLIENT] No API key provided')
         throw new Error('API key is required')
@@ -304,8 +356,9 @@ export class PostexClient {
       const [receiverFirstName, ...receiverLastNameParts] = params.receiver.name.split(' ')
       const receiverLastName = receiverLastNameParts.join(' ') || receiverFirstName
 
+      const collectionType = params.collection_type || 'pick_up'
       const requestBody = {
-        collection_type: 'pick_up',
+        collection_type: collectionType,
         parcels: params.parcels.map(parcel => ({
           courier: {
             name: 'IR_POST',
@@ -373,15 +426,12 @@ export class PostexClient {
         }))
       }
 
-      console.log('🔹 [POSTEX CLIENT] Creating bulk parcels')
-      console.log('🔹 [POSTEX CLIENT] Request:', JSON.stringify(requestBody, null, 2))
+      const endpoint = '/api/v1/parcels/bulk'
+      logPostexRequest(endpoint, requestBody)
 
-      const response = await this.client.post<BulkParcelResponse>(
-        '/api/v1/parcels/bulk',
-        requestBody
-      )
+      const response = await this.client.post<BulkParcelResponse>(endpoint, requestBody)
 
-      console.log('🔹 [POSTEX CLIENT] Response:', JSON.stringify(response.data, null, 2))
+      logPostexResponse(endpoint, response.data)
 
       if (response.data?.result?.[0]) {
         const result = response.data.result[0]
@@ -420,50 +470,75 @@ export class PostexClient {
       throw new Error('Postex did not return tracking information')
 
     } catch (error) {
-      console.error('❌ [POSTEX CLIENT] Error creating bulk parcels')
-      console.error('❌ [POSTEX CLIENT] Status:', error.response?.status)
-      console.error('❌ [POSTEX CLIENT] Message:', error.response?.data?.message)
-      
-      if (error.response?.data?.invalid_fields) {
-        console.error('❌ [POSTEX CLIENT] Invalid fields:')
-        console.error(JSON.stringify(error.response.data.invalid_fields, null, 2))
+      logPostexError('/api/v1/parcels/bulk', {
+        status: error.response?.status,
+        message: error.response?.data?.message,
+        invalid_fields: error.response?.data?.invalid_fields,
+        data: error.response?.data
+      })
+      throw error
+    }
+  }
+
+  async getParcelLabel(parcelNo: string): Promise<ArrayBuffer | null> {
+    const endpoint = `/api/v1/parcels/${parcelNo}/label`
+    try {
+      const isProduction = process.env.NODE_ENV === 'production'
+      if (!isProduction) {
+        const mockPdfBase64 = 'JVBERi0xLjQKMSAwIG9iCjw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYm9iCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSA+PgplbmRvYm8KdHJhaWxlcgo8PCAvU2l6ZSA0IC9Sb290IDEgMCA+PgpxdWFkegp4cmVmCjAgNAowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAwIG4gCjAwMDAwMDAwOTcgMDAwMDAwIG4gCjAwMDAwMDAxNTYgMDAwMDAwIG4gCg=='
+        const mockPdfBuffer = Buffer.from(mockPdfBase64, 'base64')
+        logPostexRequest(endpoint, { parcelNo, mock: true })
+        logPostexResponse(endpoint, { byteLength: mockPdfBuffer.byteLength, mock: true })
+        return new Uint8Array(mockPdfBuffer).buffer
       }
-      
-      if (error.response?.data) {
-        console.error('❌ [POSTEX CLIENT] Full response data:')
-        console.error(JSON.stringify(error.response.data, null, 2))
+
+      if (!this.options.apiKey) {
+        throw new Error('API key is required')
       }
-      
+
+      logPostexRequest(endpoint, { parcelNo })
+
+      const response = await this.client.get(endpoint, {
+        responseType: 'arraybuffer'
+      })
+
+      logPostexResponse(endpoint, { byteLength: response.data?.byteLength })
+
+      if (response.data && response.data.byteLength > 0) {
+        return response.data as ArrayBuffer
+      }
+
+      return null
+    } catch (error) {
+      logPostexError(endpoint, {
+        status: error.response?.status,
+        message: error.response?.data?.message,
+        data: error.response?.data
+      })
       throw error
     }
   }
 
   async getParcelDetail(parcelId: string): Promise<PostexParcelDetailResponse | null> {
+    const endpoint = `/api/v1/parcels/${parcelId}`
     try {
       if (!this.options.apiKey) {
-        console.warn('⚠️  [POSTEX CLIENT] No API key provided')
         throw new Error('API key is required')
       }
 
-      console.log('🔹 [POSTEX CLIENT] Fetching parcel detail for:', parcelId)
+      logPostexRequest(endpoint, { parcelId })
 
-      const response = await this.client.get<PostexParcelDetailResponse>(
-        `/api/v1/parcels/${parcelId}`
-      )
+      const response = await this.client.get<PostexParcelDetailResponse>(endpoint)
 
-      console.log('🔹 [POSTEX CLIENT] Parcel detail response:', JSON.stringify(response.data, null, 2))
+      logPostexResponse(endpoint, response.data)
 
       return response.data
     } catch (error) {
-      console.error('❌ [POSTEX CLIENT] Error fetching parcel detail')
-      console.error('❌ [POSTEX CLIENT] Status:', error.response?.status)
-      console.error('❌ [POSTEX CLIENT] Message:', error.response?.data?.message)
-      
-      if (error.response?.data) {
-        console.error('❌ [POSTEX CLIENT] Full response data:')
-        console.error(JSON.stringify(error.response.data, null, 2))
-      }
-      
+      logPostexError(endpoint, {
+        status: error.response?.status,
+        message: error.response?.data?.message,
+        data: error.response?.data
+      })
       throw error
     }
   }

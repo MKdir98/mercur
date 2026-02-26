@@ -40,7 +40,11 @@ export const GET = async (
         'description',
         'store_status',
         'created_at',
-        'updated_at'
+        'updated_at',
+        'members.id',
+        'members.role',
+        'members.photo',
+        'members.bio'
       ],
       filters,
       pagination: {
@@ -50,15 +54,20 @@ export const GET = async (
       }
     })
 
-    const transformedBrands = sellers.map((seller: any) => ({
-      id: seller.id,
-      name: seller.name,
-      handle: seller.handle || seller.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-      logo: seller.photo || null,
-      description: seller.description || null,
-      created_at: seller.created_at,
-      updated_at: seller.updated_at
-    }))
+    const transformedBrands = sellers.map((seller: any) => {
+      const ownerMember = Array.isArray(seller.members) ? seller.members.find((m: any) => m?.role === 'owner') || seller.members[0] : null
+      const logo = seller.photo || ownerMember?.photo || null
+      const description = seller.description || ownerMember?.bio || null
+      return {
+        id: seller.id,
+        name: seller.name,
+        handle: seller.handle || seller.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+        logo,
+        description,
+        created_at: seller.created_at,
+        updated_at: seller.updated_at
+      }
+    })
 
     res.json({
       brands: transformedBrands,

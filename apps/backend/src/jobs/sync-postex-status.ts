@@ -24,7 +24,6 @@ export default async function syncPostexStatusJob(container: MedusaContainer) {
      FROM postex_shipment 
      WHERE postex_parcel_id IS NOT NULL 
      AND status NOT IN ('delivered', 'canceled', 'returned', 'failed')
-     AND deleted_at IS NULL
      LIMIT 100`
   )
   

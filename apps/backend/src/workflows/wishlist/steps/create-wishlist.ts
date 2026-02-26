@@ -14,27 +14,21 @@ export const createWishlistEntryStep = createStep(
 
     let wishlist = await getWishlistFromCustomerId(container, input.customer_id)
     if (!wishlist) {
-      wishlist = await service.createWishlists(input)
-      link.create([
+      wishlist = await service.createWishlists({
+        reference: input.reference ?? 'product'
+      })
+      await link.create([
         {
-          [Modules.CUSTOMER]: {
-            customer_id: input.customer_id
-          },
-          [WISHLIST_MODULE]: {
-            wishlist_id: wishlist.id
-          }
+          [Modules.CUSTOMER]: { customer_id: input.customer_id },
+          [WISHLIST_MODULE]: { wishlist_id: wishlist.id }
         }
       ])
     }
 
     await link.create([
       {
-        [WISHLIST_MODULE]: {
-          wishlist_id: wishlist.id
-        },
-        [Modules.PRODUCT]: {
-          product_id: input.reference_id
-        }
+        [WISHLIST_MODULE]: { wishlist_id: wishlist.id },
+        [Modules.PRODUCT]: { product_id: input.reference_id }
       }
     ])
     return new StepResponse(wishlist)

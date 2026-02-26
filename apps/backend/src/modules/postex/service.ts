@@ -230,10 +230,16 @@ class PostexService extends AbstractFulfillmentProviderService {
     }
   }
 
-  async createPostexShipment(orderId: string, fulfillmentId: string, locationId?: string) {
+  async createPostexShipment(
+    orderId: string,
+    fulfillmentId: string,
+    locationId?: string,
+    deps?: { query?: any; knex?: any; stockLocationModule?: any; isBulk?: boolean }
+  ) {
     try {
-      const query = this.getDbContainer().resolve(ContainerRegistrationKeys.QUERY)
-      const knex = this.getDbContainer().resolve(ContainerRegistrationKeys.PG_CONNECTION)
+      const query = deps?.query ?? this.getDbContainer().resolve(ContainerRegistrationKeys.QUERY)
+      const knex = deps?.knex ?? this.getDbContainer().resolve(ContainerRegistrationKeys.PG_CONNECTION)
+      const stockLocationModule = deps?.stockLocationModule ?? this.getDbContainer().resolve(Modules.STOCK_LOCATION)
       
       if (!knex) {
         throw new Error('خطا در ثبت مرسوله پستکس: سرویس پایگاه داده در دسترس نیست')
@@ -311,7 +317,6 @@ class PostexService extends AbstractFulfillmentProviderService {
 
       console.log('🔹 [POSTEX SERVICE] Using location ID:', locationId)
 
-      const stockLocationModule = this.getDbContainer().resolve(Modules.STOCK_LOCATION)
       const stockLocation = await stockLocationModule.retrieveStockLocation(locationId, {
         relations: ['address']
       })
@@ -488,6 +493,8 @@ class PostexService extends AbstractFulfillmentProviderService {
       })
 
       const postexClient = new PostexClient(this.options_)
+      const isBulk = deps?.isBulk ?? false
+      const collectionType = isBulk ? 'pick_up' : 'courier_drop_off'
 
       const requestData = {
         sender: {
@@ -505,7 +512,7 @@ class PostexService extends AbstractFulfillmentProviderService {
           postal_code: receiverPostalCode
         },
         parcels,
-        collection_type: 'pick_up'
+        collection_type: collectionType
       }
 
       console.log('🔹 [POSTEX SERVICE] Creating shipment with Postex', {
@@ -633,7 +640,6 @@ class PostexService extends AbstractFulfillmentProviderService {
         `SELECT postex_parcel_id, status 
          FROM postex_shipment 
          WHERE fulfillment_id = ? 
-         AND deleted_at IS NULL 
          LIMIT 1`,
         [fulfillmentId]
       )

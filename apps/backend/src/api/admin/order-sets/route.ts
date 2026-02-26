@@ -3,6 +3,7 @@ import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 
 import orderSetOrder from '../../../links/order-set-order'
 import { getFormattedOrderSetListWorkflow } from '../../../workflows/order-set/workflows'
+import { adminOrderSetQueryConfig } from './query-config'
 
 /**
  * @oas [get] /admin/order-sets
@@ -63,7 +64,11 @@ import { getFormattedOrderSetListWorkflow } from '../../../workflows/order-set/w
  *   - cookie_auth: []
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
-  const { filterableFields, queryConfig } = req
+  const filterableFields = req.filterableFields ?? {}
+  const queryConfig = req.queryConfig ?? {
+    fields: adminOrderSetQueryConfig.list.defaults,
+    pagination: { skip: 0, take: 50 }
+  }
 
   if (filterableFields['order_id']) {
     const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
@@ -74,9 +79,13 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       entity: orderSetOrder.entryPoint,
       fields: ['order_set_id'],
       filters: {
-        order_id: req.filterableFields['order_id']
+        order_id: filterableFields['order_id']
       }
     })
+
+    if (!order_set) {
+      return res.json({ order_sets: [] })
+    }
 
     delete filterableFields['order_id']
     filterableFields['id'] = order_set.order_set_id

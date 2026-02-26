@@ -23,6 +23,7 @@ import {
   VendorGetOrderParams,
   VendorOrderCreateShipment
 } from './validators'
+import { VendorPostexCollectionBody } from './postex-collection/validators'
 
 const transformPaymentFilters = () => {
   return async (
@@ -178,5 +179,20 @@ export const vendorOrderMiddlewares: MiddlewareRoute[] = [
         filterField: 'order_id'
       })
     ]
+  },
+  {
+    method: ['GET'],
+    matcher: '/vendor/orders/:id/fulfillments/:fulfillment_id/postex-label',
+    middlewares: [
+      checkResourceOwnershipByResourceId({
+        entryPoint: sellerOrderLink.entryPoint,
+        filterField: 'order_id'
+      })
+    ]
+  },
+  {
+    method: ['POST'],
+    matcher: '/vendor/orders/postex-collection',
+    middlewares: [validateAndTransformBody(VendorPostexCollectionBody)]
   }
 ]

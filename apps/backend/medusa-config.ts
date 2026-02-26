@@ -27,6 +27,7 @@ module.exports = defineConfig({
     { resolve: '@mercurjs/reviews' },
     { resolve: '@mercurjs/marketplace' },
     { resolve: '@mercurjs/configuration' },
+    { resolve: '@mercurjs/translations' },
     { resolve: '@mercurjs/order-return-request' },
     { resolve: '@mercurjs/requests' },
     { resolve: '@mercurjs/brand' },

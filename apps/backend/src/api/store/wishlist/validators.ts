@@ -48,5 +48,5 @@ export type StoreCreateWishlistType = z.infer<typeof StoreCreateWishlist>
 
 export const StoreCreateWishlist = z.object({
   reference: z.enum(['product']),
-  reference_id: z.string()
+  reference_id: z.string().min(1, 'reference_id is required')
 })

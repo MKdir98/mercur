@@ -1,6 +1,9 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys, Modules } from '@medusajs/framework/utils'
 import { z } from 'zod'
+
+import { TRANSLATIONS_MODULE } from '@mercurjs/translations'
+import { applyTranslations, shouldTranslate } from '../../../shared/utils/apply-translations'
 import sellerProduct from '../../../links/seller-product'
 
 const RichProductsQuerySchema = z.object({
@@ -91,7 +94,10 @@ export const GET = async (
         'thumbnail',
         'status',
         'images.*',
+        'options.*',
+        'options.values.*',
         'variants.*',
+        'variants.options.*',
         'variants.inventory_items.inventory.location_levels.stocked_quantity',
         'variants.inventory_items.inventory.location_levels.reserved_quantity',
         'variants.prices.*',
@@ -190,7 +196,26 @@ export const GET = async (
     } else {
       sortedProducts = transformedProducts.sort(() => Math.random() - 0.5)
     }
-    
+
+    const locale = req.headers['x-locale'] as string | undefined
+    if (locale && shouldTranslate(locale)) {
+      const translationsService = req.scope.resolve(TRANSLATIONS_MODULE)
+      const translationMap = await translationsService.getMapForLocale(locale)
+      sortedProducts = applyTranslations(
+        sortedProducts,
+        translationMap,
+        ['title', 'description', 'name']
+      ) as typeof sortedProducts
+      for (const p of sortedProducts) {
+        if (p.categories?.length) {
+          p.categories = applyTranslations(
+            p.categories,
+            translationMap,
+            ['name']
+          ) as typeof p.categories
+        }
+      }
+    }
 
     res.json({
       products: sortedProducts,
