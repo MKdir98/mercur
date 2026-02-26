@@ -2,7 +2,7 @@ import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys, Modules } from '@medusajs/framework/utils'
 import { z } from 'zod'
 
-import { TRANSLATIONS_MODULE } from '@mercurjs/translations'
+import { TRANSLATIONS_MODULE, TranslationsModuleService } from '@mercurjs/translations'
 import { applyTranslations, shouldTranslate } from '../../../shared/utils/apply-translations'
 import sellerProduct from '../../../links/seller-product'
 
@@ -199,7 +199,7 @@ export const GET = async (
 
     const locale = req.headers['x-locale'] as string | undefined
     if (locale && shouldTranslate(locale)) {
-      const translationsService = req.scope.resolve(TRANSLATIONS_MODULE)
+      const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
       const translationMap = await translationsService.getMapForLocale(locale)
       sortedProducts = applyTranslations(
         sortedProducts,

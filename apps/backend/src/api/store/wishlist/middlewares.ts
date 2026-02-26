@@ -64,14 +64,19 @@ function logWishlistPostRequest(
   const body = (req as { body?: unknown }).body
   const authContext = (req as { auth_context?: { actor_id: string; actor_type: string } }).auth_context
   const hasAuthHeader = !!req.headers.authorization
-  const logger = req.scope.resolve(ContainerRegistrationKeys.LOGGER) as { info: (msg: string, meta?: object) => void; warn: (msg: string, meta?: object) => void }
-  logger.info('[WishlistPOST] Incoming request', {
+  const payload = JSON.stringify({
     body,
     bodyType: typeof body,
     authContext: authContext ?? null,
     hasAuthHeader,
     contentType: req.headers['content-type']
   })
+  console.log('[WishlistPOST] Incoming request', payload)
+  try {
+    const logger = req.scope.resolve(ContainerRegistrationKeys.LOGGER) as { info: (msg: string, meta?: object) => void }
+    logger.info('[WishlistPOST] Incoming request', { body, authContext: authContext ?? null, hasAuthHeader })
+  } catch {
+  }
   next()
 }
 

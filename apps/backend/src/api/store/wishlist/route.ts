@@ -10,7 +10,7 @@ import { calculateWishlistProductsPrice } from '@mercurjs/wishlist'
 import customerWishlist from '../../../links/customer-wishlist'
 import { createWishlistEntryWorkflow } from '../../../workflows/wishlist/workflows'
 import { storeWishlistFields } from './query-config'
-import { StoreCreateWishlistType } from './validators'
+import { StoreCreateWishlistType, StoreCreateWishlist } from './validators'
 
 function getCustomerIdFromRequest(req: AuthenticatedMedusaRequest): string | null {
   const fromAuth = req.auth_context?.actor_id ?? (req as { auth?: { actor_id?: string } }).auth?.actor_id
@@ -92,20 +92,20 @@ export const POST = async (
     return
   }
 
-  const input = {
-    ...req.validatedBody,
-    customer_id: customerId
-  }
-  if (!input.reference_id) {
-    logger.warn('[WishlistPOST] 400 Bad Request - reference_id missing', {
-      validatedBody: req.validatedBody,
-      input
-    })
-    res.status(400).json({
-      message: 'reference_id is required',
-      type: 'invalid_data'
-    })
+  const body = (req.validatedBody ?? req.body) as Record<string, unknown> | undefined
+  const parsed = body ? StoreCreateWishlist.safeParse(body) : { success: false as const }
+  const validatedBody = parsed.success ? parsed.data : undefined
+
+  if (!validatedBody) {
+    const zodError = !parsed.success && 'error' in parsed ? parsed.error : null
+    const message = zodError?.issues?.[0]?.message ?? 'reference_id is required'
+    res.status(400).json({ message, type: 'invalid_data' })
     return
+  }
+
+  const input = {
+    ...validatedBody,
+    customer_id: customerId
   }
 
   logger.info('[WishlistPOST] Creating wishlist entry', { customerId, reference_id: input.reference_id, reference: input.reference })

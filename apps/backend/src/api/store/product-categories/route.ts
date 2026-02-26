@@ -1,7 +1,7 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 
-import { TRANSLATIONS_MODULE } from '@mercurjs/translations'
+import { TRANSLATIONS_MODULE, TranslationsModuleService } from '@mercurjs/translations'
 import { applyTranslations, shouldTranslate } from '../../../shared/utils/apply-translations'
 
 function parseFields(fieldsStr: string | undefined): string[] {
@@ -50,7 +50,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
 
   const locale = req.headers['x-locale'] as string | undefined
   if (locale && shouldTranslate(locale) && result.length > 0) {
-    const translationsService = req.scope.resolve(TRANSLATIONS_MODULE)
+    const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
     const translationMap = await translationsService.getMapForLocale(locale)
     result = translateCategories(result, translationMap)
     if (hasChildren) {

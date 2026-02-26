@@ -1,7 +1,7 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { MedusaError } from '@medusajs/framework/utils'
 
-import { TRANSLATIONS_MODULE } from '@mercurjs/translations'
+import { TRANSLATIONS_MODULE, TranslationsModuleService } from '@mercurjs/translations'
 
 function parseCsv(content: string): Array<[string, string]> {
   const lines = content.split(/\r?\n/).filter((line) => line.trim())
@@ -41,7 +41,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const content = input.buffer.toString('utf-8')
   const rows = parseCsv(content)
 
-  const translationsService = req.scope.resolve(TRANSLATIONS_MODULE)
+  const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
 
   const created: Array<{ id: string; source_text: string; translated_text: string }> = []
   const updated: Array<{ id: string; source_text: string; translated_text: string }> = []

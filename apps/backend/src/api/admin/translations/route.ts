@@ -1,7 +1,7 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 
-import { TRANSLATIONS_MODULE } from '@mercurjs/translations'
+import { TRANSLATIONS_MODULE, TranslationsModuleService } from '@mercurjs/translations'
 import { AdminCreateTranslationType } from './validators'
 
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
@@ -27,7 +27,7 @@ export const POST = async (
   req: MedusaRequest<AdminCreateTranslationType>,
   res: MedusaResponse
 ) => {
-  const translationsService = req.scope.resolve(TRANSLATIONS_MODULE)
+  const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
 
   const result = await translationsService.createTranslations(
     req.validatedBody
