@@ -6,6 +6,7 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
 import bcrypt from "bcrypt"
+import { consumeVerificationToken } from "../../../../lib/otp/verification-token-store"
 
 /**
  * @oas [post] /store/auth/phone
@@ -64,14 +65,20 @@ export async function POST(
     phone,
     firstName,
     lastName,
+    email,
+    dateOfBirth,
     isNewUser,
     password,
+    verificationToken,
   } = req.body as {
     phone?: string
     firstName?: string
     lastName?: string
+    email?: string
+    dateOfBirth?: string
     isNewUser?: boolean
     password?: string
+    verificationToken?: string
   }
 
   if (!phone) {
@@ -86,11 +93,17 @@ export async function POST(
 
   try {
     const query = req.scope.resolve("query")
-    const authModule = req.scope.resolve(Modules.AUTH)
     const customerModule = req.scope.resolve(Modules.CUSTOMER)
 
     if (isNewUser) {
-      // ثبت نام کاربر جدید
+      if (!verificationToken || !consumeVerificationToken(verificationToken, normalizedPhone)) {
+        res.status(403).json({
+          success: false,
+          message: "تایید شماره تلفن منقضی شده است. لطفاً دوباره کد تایید دریافت کنید",
+        })
+        return
+      }
+
       if (!firstName || !lastName) {
         res.status(400).json({
           success: false,
@@ -107,24 +120,43 @@ export async function POST(
         return
       }
 
-      // تولید ایمیل موقت (چون Medusa به email نیاز دارد)
-      const tempEmail = `${normalizedPhone.replace(/\+/g, "")}@phone.temp`
+      const customerEmail =
+        email && email.trim() && !email.endsWith("@phone.temp")
+          ? email.trim()
+          : `${normalizedPhone.replace(/\+/g, "")}@phone.temp`
 
-      // Hash کردن password
+      if (email && email.trim() && !email.endsWith("@phone.temp")) {
+        const { data: existingByEmail } = await query.graph({
+          entity: "customer",
+          fields: ["id"],
+          filters: { email: customerEmail },
+        })
+        if (existingByEmail && existingByEmail.length > 0) {
+          res.status(400).json({
+            success: false,
+            message: "این ایمیل قبلاً ثبت شده است",
+          })
+          return
+        }
+      }
+
       const passwordHash = await bcrypt.hash(password, 10)
 
+      const metadata: Record<string, unknown> = {
+        password_hash: passwordHash,
+      }
+      if (dateOfBirth && dateOfBirth.trim()) {
+        metadata.date_of_birth = dateOfBirth.trim()
+      }
+
       try {
-        // ایجاد customer با phone
-        // توجه: createCustomers یک array می‌گیره
         const customers = await customerModule.createCustomers([{
-          email: tempEmail,
+          email: customerEmail,
           phone: normalizedPhone,
           first_name: firstName,
           last_name: lastName,
           has_account: true,
-          metadata: {
-            password_hash: passwordHash,
-          },
+          metadata,
         }])
 
         // چک کردن که customer ساخته شده
@@ -162,16 +194,17 @@ export async function POST(
           },
         })
       } catch (createError: any) {
-        // اگه customer قبلاً وجود داره، خطا بده
-        if (createError.message && createError.message.includes('already exists')) {
+        const errMsg = createError.message?.toLowerCase() || ""
+        if (errMsg.includes("already exists") || errMsg.includes("duplicate")) {
+          const isEmailError = errMsg.includes("email") || errMsg.includes("ایمیل")
           res.status(400).json({
             success: false,
-            message: "این شماره تلفن قبلاً ثبت نام کرده است. لطفاً از صفحه ورود استفاده کنید",
+            message: isEmailError
+              ? "این ایمیل قبلاً ثبت شده است"
+              : "این شماره تلفن قبلاً ثبت نام کرده است. لطفاً از صفحه ورود استفاده کنید",
           })
           return
         }
-        
-        // اگه خطای دیگه‌ای بود
         throw createError
       }
     } else {

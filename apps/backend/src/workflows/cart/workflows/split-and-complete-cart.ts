@@ -122,6 +122,8 @@ export const splitAndCompleteCartWorkflow = createWorkflow(
             CartShippingMethodDTO
           >()
           const variantsMap = new Map<string, any>()
+          const isIran = cart.shipping_address?.country_code?.toLowerCase() === 'ir'
+          const iranVatTaxLine = isIran ? [{ code: 'IR-VAT', rate: 10 }] : []
 
           cart.items.forEach((item) => {
             const sellerId = productSellerMap.get(item.variant.product_id)!
@@ -160,7 +162,7 @@ export const splitAndCompleteCartWorkflow = createWorkflow(
                 isTaxInclusive: item.is_tax_inclusive,
                 quantity: item.quantity,
                 metadata: item?.metadata,
-                taxLines: item.tax_lines ?? [],
+                taxLines: (item.tax_lines?.length ? item.tax_lines : iranVatTaxLine) as any,
                 adjustments: item.adjustments ?? []
               })
             )
@@ -194,7 +196,7 @@ export const splitAndCompleteCartWorkflow = createWorkflow(
                   shipping_option_id: sm.shipping_option_id,
                   data: sm.data,
                   metadata: sm.metadata,
-                  tax_lines: prepareTaxLinesData(sm.tax_lines ?? [])
+                  tax_lines: prepareTaxLinesData((sm.tax_lines?.length ? sm.tax_lines : iranVatTaxLine) as any)
                 }
               ]
             }

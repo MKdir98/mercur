@@ -70,9 +70,10 @@ export const prepareConfirmInventoryInput = (data: {
 
       if (inventory_items) {
         const inventoryItemId = inventory_items.inventory_item_id
-        if (!productVariantInventoryItems.has(inventoryItemId)) {
-          productVariantInventoryItems.set(inventoryItemId, {
-            variant_id: inventory_items.variant_id,
+        const mapKey = `${inventoryItemId}-${inventory_items.variant_id || variants.id}`
+        if (!productVariantInventoryItems.has(mapKey)) {
+          productVariantInventoryItems.set(mapKey, {
+            variant_id: inventory_items.variant_id || variants.id,
             inventory_item_id: inventoryItemId,
             required_quantity: inventory_items.required_quantity,
             stock_location_ids: []
@@ -80,7 +81,7 @@ export const prepareConfirmInventoryInput = (data: {
         }
         if (stock_locations) {
           productVariantInventoryItems
-            .get(inventoryItemId)
+            .get(mapKey)
             .stock_location_ids.push(stock_locations.id)
         }
       }
@@ -98,6 +99,58 @@ export const prepareConfirmInventoryInput = (data: {
       }
     }
   )
+
+  if (productVariantInventoryItems.size === 0 && data.input.variants?.length) {
+    for (const variant of data.input.variants) {
+      if (!allVariants.has(variant.id) && variant.manage_inventory) {
+        hasManagedInventory = true
+        allVariants.set(variant.id, {
+          id: variant.id,
+          manage_inventory: variant.manage_inventory,
+          allow_backorder: variant.allow_backorder
+        })
+      }
+      const invItems = variant.inventory_items ?? []
+      for (const invItem of invItems) {
+        const inventory = invItem.inventory
+        const locationLevels = inventory?.location_levels ?? []
+        for (const level of locationLevels) {
+          const stockLocation = level.stock_locations ?? level
+          const locationId = level.location_id ?? stockLocation?.id
+          const salesChannels = stockLocation?.sales_channels
+          const channelIds = Array.isArray(salesChannels)
+            ? salesChannels.map((sc: any) => sc?.id).filter(Boolean)
+            : salesChannels?.id
+            ? [salesChannels.id]
+            : []
+          const matchesChannel = !salesChannelId || channelIds.length === 0 || channelIds.includes(salesChannelId)
+          if (matchesChannel) {
+            if (channelIds.includes(salesChannelId)) {
+              hasSalesChannelStockLocation = true
+            } else if (!salesChannelId || channelIds.length === 0) {
+              hasSalesChannelStockLocation = true
+            }
+            const mapKey = `${invItem.inventory_item_id}-${variant.id}`
+            if (!productVariantInventoryItems.has(mapKey)) {
+              productVariantInventoryItems.set(mapKey, {
+                variant_id: variant.id,
+                inventory_item_id: invItem.inventory_item_id,
+                required_quantity: invItem.required_quantity ?? 1,
+                stock_location_ids: []
+              })
+            }
+            const locId = stockLocation?.id ?? locationId
+            if (locId) {
+              const entry = productVariantInventoryItems.get(mapKey)
+              if (entry && !entry.stock_location_ids.includes(locId)) {
+                entry.stock_location_ids.push(locId)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
   if (!hasManagedInventory) {
     return { items: [] }

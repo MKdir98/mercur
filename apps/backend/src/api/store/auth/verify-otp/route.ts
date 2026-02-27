@@ -10,6 +10,7 @@ import {
   incrementAttempts,
   isOTPExpired,
 } from "../../../../lib/otp/otp-store"
+import { createVerificationToken } from "../../../../lib/otp/verification-token-store"
 
 const MAX_ATTEMPTS = 5
 
@@ -111,12 +112,13 @@ export async function POST(
     return
   }
 
-  // موفق - حذف OTP از store
   deleteOTP(normalizedPhone)
+  const verificationToken = createVerificationToken(normalizedPhone)
 
   res.json({
     success: true,
     message: "کد تایید با موفقیت تأیید شد",
+    verificationToken,
   })
 }
 

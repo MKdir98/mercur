@@ -19,6 +19,7 @@ import { vendorMeMiddlewares } from './me/middlewares'
 import { vendorMembersMiddlewares } from './members/middlewares'
 import { vendorNotificationMiddlewares } from './notifications/middlewares'
 import { vendorOrderMiddlewares } from './orders/middlewares'
+import { vendorPostexCollectionMiddlewares } from './postex-collection/middlewares'
 import { vendorPayoutAccountMiddlewares } from './payout-account/middlewares'
 import { vendorPayoutMiddlewares } from './payouts/middlewares'
 import { vendorPriceListsMiddlewares } from './price-lists/middlewares'
@@ -103,6 +104,7 @@ export const vendorMiddlewares: MiddlewareRoute[] = [
   ...vendorPayoutAccountMiddlewares,
   ...vendorInventoryItemsMiddlewares,
   ...vendorPayoutMiddlewares,
+  ...vendorPostexCollectionMiddlewares,
   ...vendorOrderMiddlewares,
   ...vendorReturnRequestsMiddlewares,
   ...vendorInventoryItemsMiddlewares,

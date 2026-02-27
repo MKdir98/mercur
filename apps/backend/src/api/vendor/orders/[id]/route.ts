@@ -38,6 +38,8 @@ const VENDOR_ORDER_RETRIEVE_FIELDS = [
   'items.detail.raw_fulfilled_quantity',
   'items.variant',
   'items.variant.options',
+  'items.variant.product',
+  'items.variant.product.shipping_profile.id',
   'items.created_at',
   'fulfillments.id',
   'fulfillments.items',
@@ -50,8 +52,7 @@ const VENDOR_ORDER_RETRIEVE_FIELDS = [
   'fulfillments.canceled_at',
   'fulfillments.created_at',
   'fulfillments.labels',
-  'fulfillments.shipping_option',
-  'fulfillments.shipping_option.service_zone.fulfillment_set.type'
+  'shipping_methods.shipping_option_id'
 ]
 
 /**
@@ -109,6 +110,23 @@ export const GET = async (
 
   const orderData = order as Record<string, unknown>
   orderData.fulfillments = orderData.fulfillments ?? []
+  const shippingOptionId = (orderData.shipping_methods as Array<{ shipping_option_id?: string }>)?.[0]?.shipping_option_id
+  if (shippingOptionId) {
+    try {
+      const { data: [shippingOption] } = await query.graph({
+        entity: 'shipping_option',
+        fields: ['id', 'shipping_option_type.id'],
+        filters: { id: shippingOptionId }
+      })
+      const optionTypeId = (shippingOption as { shipping_option_type?: { id?: string } })?.shipping_option_type?.id
+      if (optionTypeId && Array.isArray(orderData.fulfillments)) {
+        (orderData.fulfillments as Array<Record<string, unknown>>).forEach((f) => {
+          f.shipping_option_type_id = optionTypeId
+        })
+      }
+    } catch {
+    }
+  }
   const rawItems = (orderData.items ?? []) as Array<Record<string, unknown>>
   orderData.items = rawItems.map((item) => {
     const detail = item.detail as Record<string, unknown> | undefined

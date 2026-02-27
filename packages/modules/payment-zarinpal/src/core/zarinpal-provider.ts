@@ -36,13 +36,38 @@ type Options = {
   sandbox: boolean
 }
 
+const IRAN_VAT_RATE = 0.1
+
+const toNumber = (val: unknown): number => {
+  if (val == null) return 0
+  if (typeof val === 'number') return val
+  if (typeof val === 'object' && val !== null && 'numeric_' in val) return (val as { numeric_?: number }).numeric_ ?? 0
+  if (typeof val === 'object' && val !== null && typeof (val as { toNumber?: () => number }).toNumber === 'function') return (val as { toNumber: () => number }).toNumber()
+  return Number(val) || 0
+}
+
+function computeGatewayAmount(
+  fallbackAmount: number,
+  cart: Record<string, unknown> | undefined
+): number {
+  if (!cart || typeof cart !== 'object') return fallbackAmount
+  const countryCode = (cart.shipping_address as { country_code?: string } | undefined)?.country_code?.toLowerCase?.()
+  if (countryCode !== 'ir') return fallbackAmount
+  const itemSubtotal = toNumber(cart.item_subtotal)
+  const shippingTotal = toNumber(cart.shipping_total)
+  const taxTotal = toNumber(cart.tax_total)
+  const vatAmount = taxTotal > 0 ? taxTotal : Math.round(itemSubtotal * IRAN_VAT_RATE)
+  const computedAmount = itemSubtotal + shippingTotal + vatAmount
+  if (computedAmount <= 0) return fallbackAmount
+  return computedAmount
+}
 
 abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
   protected readonly options_: Options
   protected readonly baseUrl: string
   protected readonly paymentGatewayUrl: string
 
-  constructor(container, options: Options) {
+  constructor(container: any, options: Options) {
     super(container)
 
     this.options_ = options
@@ -95,20 +120,15 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
       )
     }
 
-    const numericAmount = typeof amount === 'number' ? amount : parseFloat(amount as any)
-
-    console.log('🟡 [Zarinpal] Initiating payment:', {
-      merchantId: this.options_.merchantId,
-      amount: numericAmount,
-      amountInRials: Math.round(numericAmount * 10),
-      callbackUrl,
-      baseUrl: this.baseUrl
-    })
+    const fallbackAmount = typeof amount === 'number' ? amount : parseFloat(amount as string)
+    const ctx = context as Record<string, unknown> | undefined
+    const cart = (ctx?.cart ?? data?.cart ?? (ctx && 'items' in ctx ? ctx : undefined)) as Record<string, unknown> | undefined
+    const numericAmount = computeGatewayAmount(fallbackAmount, cart)
 
     try {
       const requestBody = {
         merchant_id: this.options_.merchantId,
-        amount: Math.round(numericAmount * 10),
+        amount: Math.round(numericAmount),
         description: (providerData?.description as string) || 'پرداخت سفارش',
         callback_url: callbackUrl,
         metadata: {
@@ -117,8 +137,6 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
           email: context?.customer?.email,
         },
       }
-
-      console.log('🟡 [Zarinpal] Request body:', requestBody)
 
       const response = await axios.post<any>(
         `${this.baseUrl}/request.json`,
@@ -130,8 +148,6 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
         }
       )
 
-      console.log('🟡 [Zarinpal] Response:', response.data)
-
       const zarinpalData = response.data.data || response.data
       const code = zarinpalData.code
       const authority = zarinpalData.authority
@@ -141,12 +157,10 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
         throw new Error(`Zarinpal request failed: ${zarinpalData.message || JSON.stringify(response.data)}`)
       }
 
-      console.log('✅ [Zarinpal] Payment initiated successfully:', authority)
-
       const paymentData = {
         id: authority,
         authority: authority,
-        amount,
+        amount: numericAmount,
         currency_code,
         status: 'pending',
         payment_url: `${this.paymentGatewayUrl}/${authority}`,
@@ -174,10 +188,7 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
   ): Promise<AuthorizePaymentOutput> {
     const paymentData = data.data as Record<string, unknown>
     
-    console.log('🟡 [Zarinpal] authorizePayment called with data:', paymentData)
-    
     if (paymentData.status === 'authorized' || paymentData.status === 'verified') {
-      console.log('✅ [Zarinpal] Payment already authorized/verified')
       return { 
         status: PaymentSessionStatus.AUTHORIZED, 
         data: { ...paymentData, status: 'authorized' } 
@@ -190,8 +201,6 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
       return { status: PaymentSessionStatus.ERROR, data: paymentData }
     }
 
-    console.log('🟡 [Zarinpal] Verifying payment with authority:', authority)
-    
     try {
       const amountValue = Number(paymentData.amount) || 0
       const response = await axios.post<any>(
@@ -199,7 +208,7 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
         {
           merchant_id: this.options_.merchantId,
           authority,
-          amount: Math.round(amountValue * 10),
+          amount: Math.round(amountValue),
         },
         {
           headers: {
@@ -211,10 +220,7 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
       const zarinpalData = response.data.data || response.data
       const code = zarinpalData.code
 
-      console.log('🟡 [Zarinpal] Verify response:', zarinpalData)
-
       if (code === 100 || code === 101) {
-        console.log('✅ [Zarinpal] Payment verified successfully')
         return {
           status: PaymentSessionStatus.AUTHORIZED,
           data: {
@@ -268,7 +274,7 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
         {
           merchant_id: this.options_.merchantId,
           authority,
-          amount: Math.round(amountValue * 10),
+          amount: Math.round(amountValue),
         },
         {
           headers: {

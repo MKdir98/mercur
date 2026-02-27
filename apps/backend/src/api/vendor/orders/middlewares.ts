@@ -23,8 +23,6 @@ import {
   VendorGetOrderParams,
   VendorOrderCreateShipment
 } from './validators'
-import { VendorPostexCollectionBody } from './postex-collection/validators'
-
 const transformPaymentFilters = () => {
   return async (
     req: MedusaRequest,
@@ -190,9 +188,4 @@ export const vendorOrderMiddlewares: MiddlewareRoute[] = [
       })
     ]
   },
-  {
-    method: ['POST'],
-    matcher: '/vendor/orders/postex-collection',
-    middlewares: [validateAndTransformBody(VendorPostexCollectionBody)]
-  }
 ]

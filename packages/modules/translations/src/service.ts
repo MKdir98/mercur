@@ -6,14 +6,18 @@ class TranslationsModuleService extends MedusaService({
   Translation,
 }) {
   async getMapForLocale(locale: string): Promise<Record<string, string>> {
-    if (locale !== "ir" && locale !== "fa") {
+    if (locale !== "ir" && locale !== "fa" && locale !== "en") {
       return {};
     }
     const translations = await this.listTranslations({});
     return (translations || []).reduce(
       (acc: Record<string, string>, t: { source_text: string; translated_text: string }) => {
         if (t.source_text && t.translated_text) {
-          acc[t.source_text] = t.translated_text;
+          if (locale === "en") {
+            acc[t.translated_text] = t.source_text;
+          } else {
+            acc[t.source_text] = t.translated_text;
+          }
         }
         return acc;
       },

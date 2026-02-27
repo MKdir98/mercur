@@ -6,7 +6,9 @@ import {
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 
 import { calculateWishlistProductsPrice } from '@mercurjs/wishlist'
+import { TRANSLATIONS_MODULE, TranslationsModuleService } from '@mercurjs/translations'
 
+import { applyTranslations, shouldTranslate } from '../../../shared/utils/apply-translations'
 import customerWishlist from '../../../links/customer-wishlist'
 import { createWishlistEntryWorkflow } from '../../../workflows/wishlist/workflows'
 import { storeWishlistFields } from './query-config'
@@ -217,10 +219,34 @@ export const GET = async (
     pagination
   })
 
-  const formattedWithPrices = await calculateWishlistProductsPrice(
+  let formattedWithPrices = await calculateWishlistProductsPrice(
     container,
     wishlists
   )
+
+  const locale = req.headers['x-locale'] as string | undefined
+  if (locale && shouldTranslate(locale)) {
+    const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
+    const translationMap = await translationsService.getMapForLocale(locale)
+    formattedWithPrices = applyTranslations(
+      formattedWithPrices,
+      translationMap,
+      ['title', 'description', 'name']
+    ) as typeof formattedWithPrices
+    for (const w of formattedWithPrices) {
+      if (w.products?.length) {
+        for (const p of w.products) {
+          if (p.categories?.length) {
+            p.categories = applyTranslations(
+              p.categories,
+              translationMap,
+              ['name']
+            ) as typeof p.categories
+          }
+        }
+      }
+    }
+  }
 
   res.json({
     wishlists: formattedWithPrices,

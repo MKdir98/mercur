@@ -6,7 +6,7 @@ export const mercurQuery = async (
     query,
     headers
   }: {
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
     body?: object | string
     query?: Record<string, string | number>
     headers?: { [key: string]: string }

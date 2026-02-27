@@ -53,12 +53,15 @@ export type VendorCreateFulfillmentType = z.infer<
   typeof VendorCreateFulfillment
 >
 export const VendorCreateFulfillment = z.object({
-  items: z.array(
-    z.object({
-      id: z.string(),
-      quantity: z.number().int().min(0)
-    })
-  ),
+  items: z
+    .array(
+      z.object({
+        id: z.string(),
+        quantity: z.number().int().min(0)
+      })
+    )
+    .optional()
+    .default([]),
   requires_shipping: z.boolean(),
   location_id: z.string()
 })

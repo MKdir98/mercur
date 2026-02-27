@@ -27,7 +27,49 @@ const bypassAuthInLocalDemo = async (
   return next()
 }
 
+const IRAN_VAT_RATE = 0.1
+
+const toNumber = (val: any): number => {
+  if (val == null) return 0
+  if (typeof val === 'number') return val
+  if (typeof val === 'object' && 'numeric_' in val) return (val as any).numeric_ ?? 0
+  if (typeof val === 'object' && 'toNumber' in val) return (val as any).toNumber()
+  return Number(val) || 0
+}
+
+const applyIranVatToCartResponse = (
+  req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+) => {
+  const originalJson = res.json.bind(res)
+  res.json = (data: any) => {
+    const cart = data?.cart ?? data
+    if (cart && typeof cart === 'object' && 'items' in cart) {
+      const countryCode = cart.shipping_address?.country_code?.toLowerCase?.()
+      const taxTotal = toNumber(cart.tax_total)
+      if (countryCode === 'ir' && taxTotal === 0) {
+        const itemSubtotal = toNumber(cart.item_subtotal)
+        const vatAmount = Math.round(itemSubtotal * IRAN_VAT_RATE)
+        if (vatAmount > 0) {
+          const currentTotal = toNumber(cart.total)
+          const newTotal = currentTotal + vatAmount
+          ;(data.cart ?? data).tax_total = vatAmount
+          ;(data.cart ?? data).total = newTotal
+        }
+      }
+    }
+    return originalJson(data)
+  }
+  next()
+}
+
 export const storeMiddlewares: MiddlewareRoute[] = [
+  {
+    method: ['GET'],
+    matcher: '/store/carts/:id',
+    middlewares: [applyIranVatToCartResponse]
+  },
   // Auth endpoints - بدون نیاز به authentication
   {
     matcher: '/store/auth/*',
@@ -64,6 +106,10 @@ export const storeMiddlewares: MiddlewareRoute[] = [
   },
   {
     matcher: '/store/product-categories',
+    middlewares: [bypassAuthInLocalDemo]
+  },
+  {
+    matcher: '/store/homepage-media',
     middlewares: [bypassAuthInLocalDemo]
   },
   {

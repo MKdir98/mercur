@@ -46,6 +46,7 @@
     "@mercurjs/city": "*",
     "@mercurjs/commission": "*",
     "@mercurjs/configuration": "*",
+    "@mercurjs/homepage-media": "*",
     "@mercurjs/framework": "*",
     "@mercurjs/marketplace": "*",
     "@mercurjs/order-return-request": "*",

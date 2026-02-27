@@ -5,7 +5,129 @@ import { ContainerRegistrationKeys, Modules } from '@medusajs/framework/utils'
 import PostexService from '../../../../modules/postex/service'
 import sellerOrderLink from '../../../../links/seller-order'
 import { fetchSellerByAuthActorId } from '../../../../shared/infra/http/utils'
-import { VendorPostexCollectionBodyType } from './validators'
+import { VendorPostexCollectionBodyType } from '../../orders/postex-collection/validators'
+
+const POSTEX_ORDERS_LIST_FIELDS = [
+  'id',
+  'display_id',
+  'email',
+  'status',
+  'total',
+  'currency_code',
+  'items.id',
+  'items.title',
+  'items.quantity',
+  'items.raw_quantity',
+  'items.detail.quantity',
+  'items.detail.raw_quantity',
+  'items.requires_shipping',
+  'items.detail.fulfilled_quantity',
+  'items.detail.raw_fulfilled_quantity',
+  'shipping_methods.shipping_option_id'
+]
+
+const toNum = (v: unknown): number => {
+  if (v == null) return 0
+  if (typeof v === 'number') return v
+  if (typeof v === 'object' && v !== null && 'value' in v) return Number((v as { value: string }).value) || 0
+  return Number(v) || 0
+}
+
+export const GET = async (
+  req: AuthenticatedMedusaRequest,
+  res: MedusaResponse
+) => {
+  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+  const seller = await fetchSellerByAuthActorId(
+    req.auth_context.actor_id,
+    req.scope
+  )
+
+  const { data: sellerOrderRelations } = await query.graph({
+    entity: sellerOrderLink.entryPoint,
+    fields: ['order_id'],
+    filters: {
+      seller_id: seller.id,
+      deleted_at: { $eq: null }
+    }
+  })
+
+  const orderIds = sellerOrderRelations.map((r: { order_id: string }) => r.order_id)
+
+  if (orderIds.length === 0) {
+    return res.json({ orders: [] })
+  }
+
+  const { data: orders } = await query.graph({
+    entity: 'order',
+    fields: POSTEX_ORDERS_LIST_FIELDS,
+    filters: { id: orderIds }
+  })
+
+  const shippingOptionIds = [
+    ...new Set(
+      (orders ?? [])
+        .flatMap((o: Record<string, unknown>) =>
+          (o.shipping_methods as Array<Record<string, unknown>>) ?? []
+        )
+        .map((sm: Record<string, unknown>) => sm.shipping_option_id as string)
+        .filter(Boolean)
+    )
+  ]
+
+  let postexOptionIds = new Set<string>()
+  if (shippingOptionIds.length > 0) {
+    const { data: shippingOptions } = await query.graph({
+      entity: 'shipping_option',
+      fields: ['id', 'provider_id'],
+      filters: { id: shippingOptionIds }
+    })
+    postexOptionIds = new Set(
+      (shippingOptions ?? [])
+        .filter(
+          (so: Record<string, unknown>) =>
+            so.provider_id && String(so.provider_id).toLowerCase().includes('postex')
+        )
+        .map((so: Record<string, unknown>) => so.id as string)
+    )
+  }
+
+  const postexOrders = (orders ?? []).filter((order: Record<string, unknown>) => {
+    const hasUnfulfilled = (order.items as Array<Record<string, unknown>>)?.some(
+      (i) => {
+        if (!i.requires_shipping) return false
+        const detail = i.detail as Record<string, unknown> | undefined
+        const qty = toNum(i.quantity ?? i.raw_quantity ?? detail?.quantity ?? detail?.raw_quantity)
+        const fulfilled = toNum(detail?.fulfilled_quantity ?? detail?.raw_fulfilled_quantity)
+        return qty - fulfilled > 0
+      }
+    )
+    const shippingMethods = (order.shipping_methods as Array<Record<string, unknown>>) ?? []
+    const optionId = shippingMethods[0]?.shipping_option_id as string | undefined
+    const isPostex = optionId ? postexOptionIds.has(optionId) : false
+    const isCanceled = order.status === 'canceled' || order.status === 'cancelled'
+    return hasUnfulfilled && !isCanceled && isPostex
+  })
+
+  res.json({
+    orders: postexOrders.map((o: Record<string, unknown>) => {
+      const items = (o.items as Array<Record<string, unknown>>) ?? []
+      const shippingItems = items.filter((i) => i.requires_shipping)
+      const summary = shippingItems.map((i) => {
+        const qty = toNum(i.quantity ?? i.raw_quantity ?? (i.detail as Record<string, unknown>)?.quantity ?? (i.detail as Record<string, unknown>)?.raw_quantity)
+        return `${i.title ?? 'کالا'} × ${qty}`
+      }).join('، ')
+      return {
+        id: o.id,
+        display_id: o.display_id,
+        email: o.email,
+        total: o.total,
+        currency_code: o.currency_code,
+        items_summary: summary || '-'
+      }
+    })
+  })
+}
 
 export const POST = async (
   req: AuthenticatedMedusaRequest<{ body: VendorPostexCollectionBodyType }>,
@@ -49,11 +171,6 @@ export const POST = async (
     apiUrl: process.env.POSTEX_API_URL || 'https://api.postex.ir'
   }
   const postexService = new PostexService(req.scope, postexConfig)
-  const walletModule = req.scope.resolve('walletModuleService') as any
-  let wallet = await walletModule.getWalletByCustomerId(seller.id)
-  if (!wallet) {
-    wallet = await walletModule.createWalletForCustomer(seller.id)
-  }
 
   const shipments: Array<{
     order_id: string
@@ -75,7 +192,11 @@ export const POST = async (
           'shipping_methods.shipping_option_id',
           'items.id',
           'items.quantity',
+          'items.raw_quantity',
+          'items.detail.quantity',
+          'items.detail.raw_quantity',
           'items.detail.fulfilled_quantity',
+          'items.detail.raw_fulfilled_quantity',
           'items.requires_shipping',
           'items.variant.product.shipping_profile.id'
         ],
@@ -121,48 +242,25 @@ export const POST = async (
       const shippingProfileId = shippingOption.shipping_profile_id
       const fulfillableItems = (order.items || [])
         .filter(
-          (item: any) =>
-            item.requires_shipping &&
-            (item.quantity || 0) - (item.detail?.fulfilled_quantity || 0) > 0 &&
-            item.variant?.product?.shipping_profile?.id === shippingProfileId
+          (item: any) => {
+            if (!item.requires_shipping) return false
+            const detail = item.detail || {}
+            const qty = toNum(item.quantity ?? item.raw_quantity ?? detail.quantity ?? detail.raw_quantity)
+            const fulfilled = toNum(detail.fulfilled_quantity ?? detail.raw_fulfilled_quantity)
+            return qty - fulfilled > 0 && item.variant?.product?.shipping_profile?.id === shippingProfileId
+          }
         )
-        .map((item: any) => ({
-          id: item.id,
-          quantity:
-            (item.quantity || 0) - (item.detail?.fulfilled_quantity || 0)
-        }))
+        .map((item: any) => {
+          const detail = item.detail || {}
+          const qty = toNum(item.quantity ?? item.raw_quantity ?? detail.quantity ?? detail.raw_quantity)
+          const fulfilled = toNum(detail.fulfilled_quantity ?? detail.raw_fulfilled_quantity)
+          return { id: item.id, quantity: qty - fulfilled }
+        })
 
       if (fulfillableItems.length === 0) {
         errors.push({
           order_id: orderId,
           message: 'اقلام قابل ارسال یافت نشد'
-        })
-        continue
-      }
-
-      const shippingAmount = Number(order.shipping_total ?? 0)
-      if (shippingAmount <= 0) {
-        errors.push({ order_id: orderId, message: 'مبلغ ارسال نامعتبر است' })
-        continue
-      }
-
-      const availableBalance = await walletModule.getAvailableBalance(wallet.id)
-      if (availableBalance < shippingAmount) {
-        errors.push({
-          order_id: orderId,
-          message: 'موجودی کیف پول کافی نیست'
-        })
-        continue
-      }
-
-      const blockRef = `postex_${orderId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-
-      try {
-        await walletModule.blockAmount(wallet.id, shippingAmount, blockRef)
-      } catch (walletError: any) {
-        errors.push({
-          order_id: orderId,
-          message: walletError.message || 'خطا در کسر از کیف پول'
         })
         continue
       }
@@ -178,13 +276,7 @@ export const POST = async (
           locationId,
           { query, knex, stockLocationModule, isBulk: true }
         )
-        await walletModule.debitBlockedAmount(
-          wallet.id,
-          shippingAmount,
-          blockRef
-        )
       } catch (postexError: any) {
-        await walletModule.unblockAmount(wallet.id, shippingAmount, blockRef)
         errors.push({
           order_id: orderId,
           message: postexError.message || 'خطا در ثبت مرسوله پستکس'

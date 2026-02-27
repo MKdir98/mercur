@@ -6,6 +6,7 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
 import bcrypt from "bcrypt"
+import { consumeVerificationToken } from "../../../../lib/otp/verification-token-store"
 
 /**
  * @oas [post] /store/auth/reset-password
@@ -55,15 +56,27 @@ export async function POST(
   const {
     phone,
     newPassword,
+    verificationToken,
   } = req.body as {
     phone?: string
     newPassword?: string
+    verificationToken?: string
   }
 
   if (!phone) {
     res.status(400).json({
       success: false,
       message: "شماره تلفن الزامی است",
+    })
+    return
+  }
+
+  const normalizedPhone = phone.replace(/[^0-9+]/g, '')
+
+  if (!verificationToken || !consumeVerificationToken(verificationToken, normalizedPhone)) {
+    res.status(403).json({
+      success: false,
+      message: "تایید شماره تلفن منقضی شده است. لطفاً دوباره کد تایید دریافت کنید",
     })
     return
   }
@@ -75,8 +88,6 @@ export async function POST(
     })
     return
   }
-
-  const normalizedPhone = phone.replace(/[^0-9+]/g, '')
 
   try {
     const query = req.scope.resolve("query")

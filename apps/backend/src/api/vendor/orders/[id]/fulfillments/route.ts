@@ -94,11 +94,6 @@ export const POST = async (
         { query, knex, stockLocationModule, isBulk: false }
       )
 
-      console.log('✅ [CREATE FULFILLMENT] Postex shipment registered successfully', {
-        tracking_number: postexShipmentData.tracking_number,
-        parcel_id: postexShipmentData.postex_parcel_id
-      })
-
     } catch (error: any) {
       console.error('❌ [CREATE FULFILLMENT] Failed to register Postex shipment', {
         message: error.message
@@ -119,36 +114,37 @@ export const POST = async (
     created_by: req.auth_context.actor_id,
     ...req.validatedBody
   }
-  console.log('🔹 [CREATE FULFILLMENT] Workflow input', {
-    order_id: workflowInput.order_id,
-    location_id: workflowInput.location_id,
-    requires_shipping: workflowInput.requires_shipping,
-    items_count: workflowInput.items?.length ?? 0,
-    items: workflowInput.items
-  })
 
   if (!workflowInput.items?.length) {
-    console.warn('⚠️ [CREATE FULFILLMENT] No items in payload - checking order items')
     const { data: [orderWithItems] } = await query.graph({
       entity: 'order',
       fields: [
         'items.id',
         'items.quantity',
+        'items.raw_quantity',
         'items.detail.fulfilled_quantity',
+        'items.detail.raw_fulfilled_quantity',
         'items.requires_shipping',
         'items.variant.product.shipping_profile.id'
       ],
       filters: { id }
     })
-    console.log('🔹 [CREATE FULFILLMENT] Order items for comparison', {
-      order_items: orderWithItems?.items?.map((i: any) => ({
+    const orderItems = orderWithItems?.items ?? []
+    const fulfillableItems = orderItems
+      .filter((i: any) => i.requires_shipping)
+      .map((i: any) => {
+        const qty = i.quantity ?? i.raw_quantity ?? 0
+        const fulfilled = i.detail?.fulfilled_quantity ?? i.detail?.raw_fulfilled_quantity ?? 0
+        const fulfillable = Math.max(0, Number(qty) - Number(fulfilled))
+        return { ...i, fulfillable }
+      })
+      .filter((i: any) => i.fulfillable > 0)
+    if (fulfillableItems.length) {
+      workflowInput.items = fulfillableItems.map((i: any) => ({
         id: i.id,
-        quantity: i.quantity,
-        fulfilled: i.detail?.fulfilled_quantity,
-        requires_shipping: i.requires_shipping,
-        shipping_profile_id: i.variant?.product?.shipping_profile?.id
+        quantity: i.fulfillable
       }))
-    })
+    }
   }
 
   let fulfillment
@@ -161,12 +157,6 @@ export const POST = async (
     })
     fulfillment = workflowResult.result
   } catch (error: any) {
-    console.error('❌ [CREATE FULFILLMENT] Workflow error', {
-      message: error.message,
-      stack: error.stack,
-      order_id: id,
-      items_sent: workflowInput.items?.length
-    })
     return res.status(400).json({
       message: error.message || 'خطا در ایجاد fulfillment'
     })
@@ -194,8 +184,6 @@ export const POST = async (
           label_url: labelUrl
         }]
       })
-
-      console.log('✅ [CREATE FULFILLMENT] Fulfillment created and linked to Postex shipment')
 
     } catch (error) {
       console.error('❌ [CREATE FULFILLMENT] Error linking fulfillment to Postex shipment:', error)

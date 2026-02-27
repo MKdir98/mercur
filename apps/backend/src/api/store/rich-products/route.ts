@@ -11,12 +11,13 @@ const RichProductsQuerySchema = z.object({
   offset: z.coerce.number().optional().default(0),
   country_code: z.string().optional(),
   region_id: z.string().optional(),
-  sort_by: z.enum(['sales_count', 'created_at', 'updated_at', 'title']).optional().default('created_at'),
+  sort_by: z.enum(['sales_count', 'created_at', 'updated_at', 'title', 'price_asc', 'price_desc']).optional().default('created_at'),
   seller_id: z.string().optional(),
   handle: z.string().optional(),
   category_id: z.string().optional(),
   category_handle: z.string().optional(),
   collection_id: z.string().optional(),
+  include_facets: z.coerce.boolean().optional().default(false),
 })
 
 type RichProductsQueryType = z.infer<typeof RichProductsQuerySchema>
@@ -29,7 +30,7 @@ export const GET = async (
 
   try {
     const validatedQuery = RichProductsQuerySchema.parse(req.query)
-    const { limit, offset, sort_by, seller_id, handle, category_id, category_handle, collection_id } = validatedQuery
+    const { limit, offset, sort_by, seller_id, handle, category_id, category_handle, collection_id, include_facets } = validatedQuery
 
     // Base filters for products
     const filters: Record<string, any> = { status: 'published' }
@@ -66,22 +67,75 @@ export const GET = async (
     if (seller_id) {
       const { data: sellerLinks } = await query.graph({
         entity: sellerProduct.entryPoint,
-        fields: ['product_id', 'seller_id', 'seller.handle', 'seller.store_status'],
+        fields: ['product_id', 'seller_id', 'seller.handle', 'seller.name', 'seller.store_status'],
         filters: { seller_id }
       })
 
       const productIds = (sellerLinks || []).map((l: any) => l.product_id)
       if (productIds.length === 0) {
-        return res.json({ products: [], count: 0, limit, offset, sort_by })
+        return res.json({ products: [], count: 0, limit, offset, sort_by, facets: include_facets ? { categories: [], brands: [] } : undefined })
       }
       filters['id'] = productIds
       productIdToSeller = Object.fromEntries(
         (sellerLinks || []).map((l: any) => [
           l.product_id,
-          { id: l.seller_id, handle: l.seller?.handle, store_status: l.seller?.store_status }
+          { id: l.seller_id, handle: l.seller?.handle, name: l.seller?.name, store_status: l.seller?.store_status }
         ])
       )
     }
+
+    let facets: { categories: Array<{ id: string; handle: string; name: string; count: number }>; brands: Array<{ id: string; handle: string; name: string; count: number }> } | undefined
+    if (include_facets) {
+      const { data: facetProducts } = await query.graph({
+        entity: 'product',
+        fields: ['id', 'categories.id', 'categories.handle', 'categories.name'],
+        filters,
+        pagination: { skip: 0, take: 10000 }
+      })
+      const facetProductIds = (facetProducts || []).map((p: any) => p.id)
+      const categoryCounts = new Map<string, { id: string; handle: string; name: string; count: number }>()
+      for (const p of facetProducts || []) {
+        for (const cat of p.categories || []) {
+          if (cat?.id) {
+            const existing = categoryCounts.get(cat.id)
+            if (existing) {
+              existing.count++
+            } else {
+              categoryCounts.set(cat.id, { id: cat.id, handle: cat.handle || '', name: cat.name || '', count: 1 })
+            }
+          }
+        }
+      }
+      let sellerLinksForFacets: any[] = []
+      if (facetProductIds.length > 0) {
+        const { data: links } = await query.graph({
+          entity: sellerProduct.entryPoint,
+          fields: ['seller_id', 'seller.handle', 'seller.name'],
+          filters: { product_id: facetProductIds }
+        })
+        sellerLinksForFacets = links || []
+      }
+      const brandCounts = new Map<string, { id: string; handle: string; name: string; count: number }>()
+      for (const l of sellerLinksForFacets) {
+        const s = l.seller_id
+        if (s) {
+          const existing = brandCounts.get(s)
+          if (existing) {
+            existing.count++
+          } else {
+            brandCounts.set(s, { id: s, handle: l.seller?.handle || '', name: l.seller?.name || '', count: 1 })
+          }
+        }
+      }
+      facets = {
+        categories: Array.from(categoryCounts.values()).sort((a, b) => b.count - a.count),
+        brands: Array.from(brandCounts.values()).sort((a, b) => b.count - a.count)
+      }
+    }
+
+    const isPriceSort = sort_by === 'price_asc' || sort_by === 'price_desc'
+    const fetchLimit = isPriceSort ? 10000 : limit
+    const fetchOffset = isPriceSort ? 0 : offset
 
     const { data: products, metadata } = await query.graph({
       entity: 'product',
@@ -105,8 +159,8 @@ export const GET = async (
       ],
       filters,
       pagination: {
-        skip: offset,
-        take: limit,
+        skip: fetchOffset,
+        take: fetchLimit,
         order: { created_at: 'DESC' }
       }
     })
@@ -118,13 +172,13 @@ export const GET = async (
     if (!Object.keys(productIdToSeller).length && (products || []).length) {
       const { data: links } = await query.graph({
         entity: sellerProduct.entryPoint,
-        fields: ['product_id', 'seller_id', 'seller.handle', 'seller.store_status'],
+        fields: ['product_id', 'seller_id', 'seller.handle', 'seller.name', 'seller.store_status'],
         filters: { product_id: (products || []).map((p: any) => p.id) }
       })
       productIdToSeller = Object.fromEntries(
         (links || []).map((l: any) => [
           l.product_id,
-          { id: l.seller_id, handle: l.seller?.handle, store_status: l.seller?.store_status }
+          { id: l.seller_id, handle: l.seller?.handle, name: l.seller?.name, store_status: l.seller?.store_status }
         ])
       )
     }
@@ -188,13 +242,28 @@ export const GET = async (
       return { ...product, seller, variants: variantsWithPrices }
     }))
 
+    const getMinPrice = (p: any) => {
+      if (!p.variants?.length) return Infinity
+      return Math.min(
+        ...p.variants.map((v: any) => v.calculated_price?.calculated_amount ?? Infinity)
+      )
+    }
+
     let sortedProducts = transformedProducts
     if (sort_by === 'title') {
-      sortedProducts = transformedProducts.sort((a: any, b: any) => a.title.localeCompare(b.title))
+      sortedProducts = [...transformedProducts].sort((a: any, b: any) => a.title.localeCompare(b.title))
     } else if (sort_by === 'created_at') {
-      sortedProducts = transformedProducts.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      sortedProducts = [...transformedProducts].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    } else if (sort_by === 'price_asc') {
+      sortedProducts = [...transformedProducts].sort((a: any, b: any) => getMinPrice(a) - getMinPrice(b))
+    } else if (sort_by === 'price_desc') {
+      sortedProducts = [...transformedProducts].sort((a: any, b: any) => getMinPrice(b) - getMinPrice(a))
     } else {
-      sortedProducts = transformedProducts.sort(() => Math.random() - 0.5)
+      sortedProducts = [...transformedProducts].sort(() => Math.random() - 0.5)
+    }
+
+    if (isPriceSort) {
+      sortedProducts = sortedProducts.slice(offset, offset + limit)
     }
 
     const locale = req.headers['x-locale'] as string | undefined
@@ -215,6 +284,20 @@ export const GET = async (
           ) as typeof p.categories
         }
       }
+      if (facets?.categories?.length) {
+        facets.categories = applyTranslations(
+          facets.categories,
+          translationMap,
+          ['name']
+        ) as typeof facets.categories
+      }
+      if (facets?.brands?.length) {
+        facets.brands = applyTranslations(
+          facets.brands,
+          translationMap,
+          ['name']
+        ) as typeof facets.brands
+      }
     }
 
     res.json({
@@ -222,7 +305,8 @@ export const GET = async (
       count: metadata?.count || 0,
       limit,
       offset,
-      sort_by
+      sort_by,
+      ...(facets && { facets })
     })
   } catch (error) {
     console.error('Error fetching rich products:', error)

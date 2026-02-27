@@ -1,6 +1,9 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
+import { TRANSLATIONS_MODULE, TranslationsModuleService } from '@mercurjs/translations'
 import { z } from 'zod'
+
+import { applyTranslations, shouldTranslate } from '../../../shared/utils/apply-translations'
 
 const BrandsQuerySchema = z.object({
   limit: z.coerce.number().optional().default(50),
@@ -54,7 +57,7 @@ export const GET = async (
       }
     })
 
-    const transformedBrands = sellers.map((seller: any) => {
+    let transformedBrands = sellers.map((seller: any) => {
       const ownerMember = Array.isArray(seller.members) ? seller.members.find((m: any) => m?.role === 'owner') || seller.members[0] : null
       const logo = seller.photo || ownerMember?.photo || null
       const description = seller.description || ownerMember?.bio || null
@@ -68,6 +71,17 @@ export const GET = async (
         updated_at: seller.updated_at
       }
     })
+
+    const locale = req.headers['x-locale'] as string | undefined
+    if (locale && shouldTranslate(locale)) {
+      const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
+      const translationMap = await translationsService.getMapForLocale(locale)
+      transformedBrands = applyTranslations(
+        transformedBrands,
+        translationMap,
+        ['name', 'description']
+      ) as typeof transformedBrands
+    }
 
     res.json({
       brands: transformedBrands,

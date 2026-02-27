@@ -13,7 +13,7 @@ export const GET = async (
   const fulfillmentId = req.params.fulfillment_id
   const orderId = req.params.id
 
-  const shipmentResult = await knex.raw(
+  let shipmentResult = await knex.raw(
     `SELECT postex_parcel_id 
      FROM postex_shipment 
      WHERE fulfillment_id = ? AND order_id = ? 
@@ -22,12 +22,23 @@ export const GET = async (
   )
 
   if (!shipmentResult?.rows?.[0]?.postex_parcel_id) {
+    shipmentResult = await knex.raw(
+      `SELECT postex_parcel_id 
+       FROM postex_shipment 
+       WHERE fulfillment_id = ? 
+       LIMIT 1`,
+      [fulfillmentId]
+    )
+  }
+
+  const row = shipmentResult?.rows?.[0] ?? shipmentResult?.[0]
+  const parcelNo = row?.postex_parcel_id
+
+  if (!parcelNo) {
     return res.status(404).json({
       message: 'لیبل مرسوله پستکس یافت نشد'
     })
   }
-
-  const parcelNo = shipmentResult.rows[0].postex_parcel_id
 
   try {
     const postexClient = new PostexClient({

@@ -3,7 +3,6 @@ import {
   AuthenticatedMedusaRequest,
   MedusaResponse
 } from '@medusajs/framework/http'
-import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 
 /**
  * @oas [post] /vendor/orders/{id}/fulfillments/{fulfillment_id}/mark-as-delivered
@@ -32,8 +31,11 @@ import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
  *         schema:
  *           type: object
  *           properties:
- *             member:
- *               $ref: "#/components/schemas/VendorOrderDetails"
+ *             order:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
  * tags:
  *   - Vendor Orders
  * security:
@@ -44,22 +46,10 @@ export const POST = async (
   req: AuthenticatedMedusaRequest,
   res: MedusaResponse
 ) => {
-  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
-
   await markOrderFulfillmentAsDeliveredWorkflow.run({
     container: req.scope,
     input: { orderId: req.params.id, fulfillmentId: req.params.fulfillment_id }
   })
 
-  const {
-    data: [order]
-  } = await query.graph({
-    entity: 'order',
-    fields: req.queryConfig.fields,
-    filters: {
-      id: req.params.id
-    }
-  })
-
-  res.json({ order })
+  res.json({ order: { id: req.params.id } })
 }

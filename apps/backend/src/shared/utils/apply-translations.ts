@@ -33,5 +33,5 @@ export function applyTranslations<T>(
 }
 
 export function shouldTranslate(locale: string | undefined): boolean {
-  return locale === 'ir' || locale === 'fa'
+  return locale === 'ir' || locale === 'fa' || locale === 'en'
 }

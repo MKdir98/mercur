@@ -1,5 +1,8 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
+import { TRANSLATIONS_MODULE, TranslationsModuleService } from '@mercurjs/translations'
+
+import { applyTranslations, shouldTranslate } from '../../../../shared/utils/apply-translations'
 
 /**
  * @oas [get] /store/seller/{handle}
@@ -48,7 +51,15 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     }
   })
 
+  let result = seller
+  const locale = req.headers['x-locale'] as string | undefined
+  if (locale && shouldTranslate(locale) && result) {
+    const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
+    const translationMap = await translationsService.getMapForLocale(locale)
+    result = applyTranslations(result, translationMap, ['name', 'description']) as typeof result
+  }
+
   res.json({
-    seller
+    seller: result
   })
 }

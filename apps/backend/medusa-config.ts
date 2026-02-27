@@ -28,6 +28,7 @@ module.exports = defineConfig({
     { resolve: '@mercurjs/marketplace' },
     { resolve: '@mercurjs/configuration' },
     { resolve: '@mercurjs/translations' },
+    { resolve: '@mercurjs/homepage-media' },
     { resolve: '@mercurjs/order-return-request' },
     { resolve: '@mercurjs/requests' },
     { resolve: '@mercurjs/brand' },

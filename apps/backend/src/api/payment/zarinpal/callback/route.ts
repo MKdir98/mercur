@@ -1,6 +1,9 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { Modules } from '@medusajs/framework/utils'
 
+import { splitAndCompleteCartWorkflow } from '#/workflows/cart/workflows'
+import { getFormattedOrderSetListWorkflow } from '#/workflows/order-set/workflows'
+
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   console.log('🔵 [Callback] Zarinpal callback received')
   
@@ -78,16 +81,22 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     console.log('🔵 [Callback] Completing order for cart:', cartId)
     
     try {
-      const { completeCartWorkflow } = await import('@medusajs/medusa/core-flows')
-      
-      console.log('🔵 [Callback] Running complete cart workflow...')
-      const result = await completeCartWorkflow(req.scope).run({
-        input: { id: cartId }
+      console.log('🔵 [Callback] Running split and complete cart workflow...')
+      const { result } = await splitAndCompleteCartWorkflow(req.scope).run({
+        input: { id: cartId },
+        context: { transactionId: cartId }
       })
       
-      console.log('✅ [Callback] Cart completed:', result)
+      console.log('✅ [Callback] Cart completed, order set id:', result.id)
       
-      const orderId = result?.result?.id || (result as any)?.order_set?.orders?.[0]?.id
+      const {
+        result: { data }
+      } = await getFormattedOrderSetListWorkflow(req.scope).run({
+        input: { filters: { id: result.id } }
+      })
+      
+      const orderSet = data?.[0]
+      const orderId = orderSet?.orders?.[0]?.id
       
       if (orderId) {
         console.log('✅ [Callback] Order created:', orderId)
