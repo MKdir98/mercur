@@ -67,43 +67,7 @@ export const POST = async (
     providerId = shippingOption?.provider_id
   }
 
-  let postexShipmentData: any = null
-
-  if (providerId?.includes('postex')) {
-
-    const blockRef = `postex_${id}_${Date.now()}`
-
-
-    try {
-      const postexConfig = {
-        apiKey: process.env.POSTEX_API_KEY,
-        apiUrl: process.env.POSTEX_API_URL || 'https://api.postex.ir'
-      }
-      
-      const postexService = new PostexService(req.scope, postexConfig)
-
-      const tempFulfillmentId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      const locationId = req.validatedBody.location_id
-      
-      const knex = req.scope.resolve(ContainerRegistrationKeys.PG_CONNECTION)
-      const stockLocationModule = req.scope.resolve(Modules.STOCK_LOCATION)
-      postexShipmentData = await postexService.createPostexShipment(
-        id,
-        tempFulfillmentId,
-        locationId,
-        { query, knex, stockLocationModule, isBulk: false }
-      )
-
-    } catch (error: any) {
-      console.error('❌ [CREATE FULFILLMENT] Failed to register Postex shipment', {
-        message: error.message
-      })
-
-      return res.status(400).json({
-        message: `خطا در ثبت مرسوله پستکس: ${error.message}`
-      })
-    }
-  } else {
+  if (!providerId?.includes('postex')) {
     return res.status(500).json({
       message: 'فقط میتوانید مرسوله پستکس را ثبت کنید'
     })
@@ -162,32 +126,38 @@ export const POST = async (
     })
   }
 
-  if (postexShipmentData) {
-    try {
-      const knex = req.scope.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+  const fulfillmentId = Array.isArray(fulfillment) ? fulfillment[0]?.id : fulfillment?.id
 
-      await knex.raw(
-        `UPDATE postex_shipment 
-         SET fulfillment_id = ?, updated_at = NOW() 
-         WHERE fulfillment_id LIKE 'temp_%' 
-         AND order_id = ?
-         ORDER BY created_at DESC
-         LIMIT 1`,
-        [fulfillment.id, id]
-      )
-
-      const labelUrl = `/vendor/orders/${id}/fulfillments/${fulfillment.id}/postex-label`
-      await fulfillmentModule.updateFulfillment(fulfillment.id, {
-        labels: [{
-          tracking_number: postexShipmentData.tracking_number,
-          tracking_url: postexShipmentData.tracking_url,
-          label_url: labelUrl
-        }]
-      })
-
-    } catch (error) {
-      console.error('❌ [CREATE FULFILLMENT] Error linking fulfillment to Postex shipment:', error)
+  try {
+    const postexConfig = {
+      apiKey: process.env.POSTEX_API_KEY,
+      apiUrl: process.env.POSTEX_API_URL || 'https://api.postex.ir'
     }
+    const postexService = new PostexService(req.scope, postexConfig)
+    const knex = req.scope.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+    const stockLocationModule = req.scope.resolve(Modules.STOCK_LOCATION)
+    const locationId = req.validatedBody.location_id
+
+    const postexShipmentData = await postexService.createPostexShipment(
+      id,
+      fulfillmentId,
+      locationId,
+      { query, knex, stockLocationModule, isBulk: false }
+    )
+
+    const labelUrl = `/vendor/orders/${id}/fulfillments/${fulfillmentId}/postex-label`
+    await fulfillmentModule.updateFulfillment(fulfillmentId, {
+      labels: [{
+        tracking_number: postexShipmentData.tracking_number,
+        tracking_url: postexShipmentData.tracking_url,
+        label_url: labelUrl
+      }]
+    })
+  } catch (error: any) {
+    console.error('❌ [CREATE FULFILLMENT] Failed to register Postex shipment:', error)
+    return res.status(400).json({
+      message: `خطا در ثبت مرسوله پستکس: ${error.message}`
+    })
   }
 
   res.json({ fulfillment })

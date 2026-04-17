@@ -1,11 +1,11 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework";
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils";
 
 import {
   HOMEPAGE_MEDIA_MODULE,
   HomepageMediaModuleService,
 } from "@mercurjs/homepage-media";
-import { AdminUpdateHomepageMediaBodyType } from "./validators";
+import { AdminUpdateHomepageMediaBody, AdminUpdateHomepageMediaBodyType } from "./validators";
 
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const service = req.scope.resolve(
@@ -46,7 +46,18 @@ export const PUT = async (
     HOMEPAGE_MEDIA_MODULE
   ) as HomepageMediaModuleService;
 
-  const { items } = req.validatedBody;
+  const parsedBody = AdminUpdateHomepageMediaBody.safeParse(
+    req.validatedBody ?? req.body
+  );
+
+  if (!parsedBody.success) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "Request body must include a valid items array."
+    );
+  }
+
+  const { items } = parsedBody.data;
 
   for (const item of items) {
     const data: Record<string, unknown> = {};

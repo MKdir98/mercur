@@ -209,6 +209,7 @@ class PostexService extends AbstractFulfillmentProviderService {
       throw new Error('خطا در استعلام هزینه ارسال: پستکس قیمتی برنگرداند')
 
     } catch (error) {
+      console.log(error)
       console.error('❌ [POSTEX ERROR]', {
         message: error.message,
         stack: error.stack,

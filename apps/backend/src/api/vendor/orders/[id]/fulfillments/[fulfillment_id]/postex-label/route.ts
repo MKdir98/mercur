@@ -13,25 +13,28 @@ export const GET = async (
   const fulfillmentId = req.params.fulfillment_id
   const orderId = req.params.id
 
-  let shipmentResult = await knex.raw(
-    `SELECT postex_parcel_id 
-     FROM postex_shipment 
-     WHERE fulfillment_id = ? AND order_id = ? 
-     LIMIT 1`,
-    [fulfillmentId, orderId]
-  )
+  let row = await knex('postex_shipment')
+    .where('fulfillment_id', fulfillmentId)
+    .where('order_id', orderId)
+    .select('postex_parcel_id')
+    .first()
 
-  if (!shipmentResult?.rows?.[0]?.postex_parcel_id) {
-    shipmentResult = await knex.raw(
-      `SELECT postex_parcel_id 
-       FROM postex_shipment 
-       WHERE fulfillment_id = ? 
-       LIMIT 1`,
-      [fulfillmentId]
-    )
+  if (!row?.postex_parcel_id) {
+    row = await knex('postex_shipment')
+      .where('fulfillment_id', fulfillmentId)
+      .select('postex_parcel_id')
+      .first()
   }
 
-  const row = shipmentResult?.rows?.[0] ?? shipmentResult?.[0]
+  if (!row?.postex_parcel_id) {
+    row = await knex('postex_shipment')
+      .where('order_id', orderId)
+      .where('fulfillment_id', 'like', 'temp_%')
+      .select('postex_parcel_id')
+      .orderBy('created_at', 'desc')
+      .first()
+  }
+
   const parcelNo = row?.postex_parcel_id
 
   if (!parcelNo) {

@@ -265,25 +265,6 @@ export const POST = async (
         continue
       }
 
-      let postexShipmentData: any = null
-
-      try {
-        const tempFulfillmentId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        const stockLocationModule = req.scope.resolve(Modules.STOCK_LOCATION)
-        postexShipmentData = await postexService.createPostexShipment(
-          orderId,
-          tempFulfillmentId,
-          locationId,
-          { query, knex, stockLocationModule, isBulk: true }
-        )
-      } catch (postexError: any) {
-        errors.push({
-          order_id: orderId,
-          message: postexError.message || 'خطا در ثبت مرسوله پستکس'
-        })
-        continue
-      }
-
       const { result: fulfillment } = await createOrderFulfillmentWorkflow(
         req.scope
       ).run({
@@ -297,18 +278,27 @@ export const POST = async (
         throwOnError: true
       })
 
-      await knex.raw(
-        `UPDATE postex_shipment 
-         SET fulfillment_id = ?, updated_at = NOW() 
-         WHERE fulfillment_id LIKE 'temp_%' 
-         AND order_id = ?
-         ORDER BY created_at DESC
-         LIMIT 1`,
-        [fulfillment.id, orderId]
-      )
+      const fulfillmentId = Array.isArray(fulfillment) ? fulfillment[0]?.id : fulfillment?.id
 
-      const labelUrl = `/vendor/orders/${orderId}/fulfillments/${fulfillment.id}/postex-label`
-      await fulfillmentModule.updateFulfillment(fulfillment.id, {
+      let postexShipmentData: any
+      try {
+        const stockLocationModule = req.scope.resolve(Modules.STOCK_LOCATION)
+        postexShipmentData = await postexService.createPostexShipment(
+          orderId,
+          fulfillmentId,
+          locationId,
+          { query, knex, stockLocationModule, isBulk: true }
+        )
+      } catch (postexError: any) {
+        errors.push({
+          order_id: orderId,
+          message: postexError.message || 'خطا در ثبت مرسوله پستکس'
+        })
+        continue
+      }
+
+      const labelUrl = `/vendor/orders/${orderId}/fulfillments/${fulfillmentId}/postex-label`
+      await fulfillmentModule.updateFulfillment(fulfillmentId, {
         labels: [{
           tracking_number: postexShipmentData.tracking_number,
           tracking_url: postexShipmentData.tracking_url,
@@ -318,7 +308,7 @@ export const POST = async (
 
       shipments.push({
         order_id: orderId,
-        fulfillment_id: fulfillment.id,
+        fulfillment_id: fulfillmentId,
         tracking_number: postexShipmentData.tracking_number,
         label_url: labelUrl
       })
