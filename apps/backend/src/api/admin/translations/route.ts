@@ -1,25 +1,21 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
-import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
-
 import { TRANSLATIONS_MODULE, TranslationsModuleService } from '@mercurjs/translations'
 import { AdminCreateTranslationType } from './validators'
 
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
-  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
-
-  const pagination = req.queryConfig?.pagination ?? { skip: 0, take: 50 }
-
-  const { data: translations, metadata } = await query.graph({
-    entity: 'translation',
-    fields: ['id', 'source_text', 'translated_text'],
-    pagination
-  })
+  const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
+  const offset = Number(req.query.offset ?? 0)
+  const limit = Number(req.query.limit ?? 50)
+  const safeOffset = Number.isNaN(offset) ? 0 : Math.max(offset, 0)
+  const safeLimit = Number.isNaN(limit) ? 50 : Math.max(limit, 1)
+  const allTranslations = await translationsService.listTranslations({})
+  const translations = allTranslations.slice(safeOffset, safeOffset + safeLimit)
 
   res.json({
     translations: translations || [],
-    count: metadata?.count ?? 0,
-    offset: metadata?.skip ?? 0,
-    limit: metadata?.take ?? 50
+    count: allTranslations.length,
+    offset: safeOffset,
+    limit: safeLimit
   })
 }
 

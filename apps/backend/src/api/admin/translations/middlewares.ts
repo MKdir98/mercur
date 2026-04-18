@@ -2,6 +2,7 @@ import multer from 'multer'
 
 import {
   MiddlewareRoute,
+  unlessPath,
   validateAndTransformBody,
   validateAndTransformQuery,
 } from "@medusajs/framework";
@@ -38,7 +39,12 @@ export const translationsMiddleware: MiddlewareRoute[] = [
   {
     method: ["POST"],
     matcher: "/admin/translations/:id",
-    middlewares: [validateAndTransformBody(AdminUpdateTranslation)],
+    middlewares: [
+      unlessPath(
+        /.*\/translations\/import/,
+        validateAndTransformBody(AdminUpdateTranslation)
+      ),
+    ],
   },
   {
     method: ["DELETE"],

@@ -69,6 +69,51 @@ print_step() {
     echo -e "${CYAN}▶${NC} ${1}"
 }
 
+apply_proxy() {
+    if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
+        export HTTP_PROXY="${HTTP_PROXY:-}"
+        export HTTPS_PROXY="${HTTPS_PROXY:-$HTTP_PROXY}"
+        export http_proxy="${http_proxy:-$HTTP_PROXY}"
+        export https_proxy="${https_proxy:-$HTTPS_PROXY}"
+        export ALL_PROXY="${ALL_PROXY:-${HTTPS_PROXY:-$HTTP_PROXY}}"
+        export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1}"
+        export no_proxy="${no_proxy:-$NO_PROXY}"
+        export npm_config_proxy="${npm_config_proxy:-$HTTP_PROXY}"
+        export npm_config_https_proxy="${npm_config_https_proxy:-$HTTPS_PROXY}"
+        if [ -w /etc/apt/apt.conf.d ] 2>/dev/null; then
+            local apt_proxy="${HTTP_PROXY:-$HTTPS_PROXY}"
+            if [ -n "$apt_proxy" ]; then
+                echo "Acquire::http::Proxy \"$apt_proxy\";" > /etc/apt/apt.conf.d/99deploy-proxy 2>/dev/null || true
+                echo "Acquire::https::Proxy \"$apt_proxy\";" >> /etc/apt/apt.conf.d/99deploy-proxy 2>/dev/null || true
+            fi
+        fi
+        print_info "Using HTTP proxy: ${HTTP_PROXY:-$HTTPS_PROXY}"
+    fi
+}
+
+run_git() {
+    if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
+        git -c http.proxy="${HTTP_PROXY:-$HTTPS_PROXY}" -c https.proxy="${HTTPS_PROXY:-$HTTP_PROXY}" "$@"
+    else
+        git "$@"
+    fi
+}
+
+convert_github_ssh_to_https() {
+    local remote="$1"
+    if [[ "$remote" =~ ^git@github\.com:(.+)$ ]]; then
+        echo "https://github.com/${BASH_REMATCH[1]}"
+        return
+    fi
+    if [[ "$remote" =~ ^ssh://git@github\.com/(.+)$ ]]; then
+        echo "https://github.com/${BASH_REMATCH[1]}"
+        return
+    fi
+    echo "$remote"
+}
+
+apply_proxy
+
 # Check if running as root
 check_root() {
     if [[ $EUID -ne 0 ]]; then
@@ -235,10 +280,15 @@ clone_or_update_project() {
         cd "$project_path"
         
         # Stash any local changes
-        git stash save "Auto-stash before pull at $(date)" 2>/dev/null || true
+        run_git stash save "Auto-stash before pull at $(date)" 2>/dev/null || true
         
         # Pull latest changes
-        git pull origin main || git pull origin master
+        local pull_remote="origin"
+        local origin_url=$(run_git remote get-url origin 2>/dev/null || echo "")
+        if [ -n "$origin_url" ] && ([ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]); then
+            pull_remote=$(convert_github_ssh_to_https "$origin_url")
+        fi
+        run_git pull "$pull_remote" main || run_git pull "$pull_remote" master
         
         print_success "$project_name updated"
     else
@@ -253,10 +303,14 @@ clone_or_update_project() {
             print_success "$project_name copied from local"
         else
             # Clone from git using SSH
-            git clone "$REPO_BASE_URL/$repo_name.git" || {
+            local clone_base_url="$REPO_BASE_URL"
+            if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
+                clone_base_url="https://github.com/$GITHUB_USERNAME"
+            fi
+            run_git clone "$clone_base_url/$repo_name.git" || {
                 print_error "Failed to clone $repo_name. Please check:"
                 print_error "  1. SSH keys are set up correctly"
-                print_error "  2. Repository exists: $REPO_BASE_URL/$repo_name.git"
+                print_error "  2. Repository exists: $clone_base_url/$repo_name.git"
                 print_error "  3. You have access to the repository"
                 exit 1
             }

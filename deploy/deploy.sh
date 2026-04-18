@@ -24,6 +24,9 @@ NC='\033[0m'
 FORCE_REBUILD=false
 WITH_SSL=false
 SKIP_SERVICES_CHECK=false
+DEBUG_COMMANDS=false
+USE_INTERNAL_NPM_REGISTRY=false
+INTERNAL_NPM_REGISTRY=""
 
 # Check arguments
 if [ "$#" -lt 1 ]; then
@@ -37,6 +40,8 @@ if [ "$#" -lt 1 ]; then
     echo "  --with-ssl           Automatically setup SSL after deployment"
     echo "  --force-rebuild      Force rebuild all projects even if no changes"
     echo "  --skip-services      Skip Redis/Elasticsearch checks (for dev/testing)"
+    echo "  --debug-commands     Show executed shell commands"
+    echo "  --npm-registry URL   Use internal npm registry and bypass npm proxy"
     echo ""
     echo "Proxy (optional): set HTTP_PROXY and/or HTTPS_PROXY in config file or environment"
     echo "  Example in .properties: HTTP_PROXY=http://proxy.example.com:8080"
@@ -51,10 +56,15 @@ if [ "$#" -lt 1 ]; then
 fi
 
 CONFIG_FILE="$1"
-COMMAND="${2:-deploy}"
+shift
 
-# Parse optional flags
-shift 2 2>/dev/null || shift 1
+if [ "$#" -gt 0 ] && [[ "$1" != --* ]]; then
+    COMMAND="$1"
+    shift
+else
+    COMMAND="deploy"
+fi
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --with-ssl)
@@ -66,6 +76,18 @@ while [ "$#" -gt 0 ]; do
         --skip-services)
             SKIP_SERVICES_CHECK=true
             ;;
+        --debug-commands)
+            DEBUG_COMMANDS=true
+            ;;
+        --npm-registry)
+            if [ -z "${2:-}" ] || [[ "${2:-}" == --* ]]; then
+                echo "Missing value for --npm-registry"
+                exit 1
+            fi
+            USE_INTERNAL_NPM_REGISTRY=true
+            INTERNAL_NPM_REGISTRY="$2"
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
             exit 1
@@ -73,6 +95,11 @@ while [ "$#" -gt 0 ]; do
     esac
     shift
 done
+
+if [ "$DEBUG_COMMANDS" = true ]; then
+    export PS4='+ [${BASH_SOURCE##*/}:${LINENO}] '
+    set -x
+fi
 
 # Load properties file
 load_properties() {
@@ -85,21 +112,25 @@ load_properties() {
     
     echo -e "${BLUE}ℹ${NC} Loading configuration from: $config_file"
     
-    # Read properties file and export variables
-    while IFS='=' read -r key value; do
-        # Skip comments and empty lines
-        [[ "$key" =~ ^#.*$ ]] && continue
-        [[ -z "$key" ]] && continue
-        
-        # Trim whitespace
-        key=$(echo "$key" | xargs)
-        value=$(echo "$value" | xargs)
-        
-        # Remove quotes if present
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="$(echo "$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+        [[ -z "$line" ]] && continue
+        [[ "$line" =~ ^# ]] && continue
+        [[ "$line" != *"="* ]] && continue
+
+        local key="${line%%=*}"
+        local value="${line#*=}"
+
+        key="$(echo "$key" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+        value="$(echo "$value" | sed -E 's/[[:space:]]+#.*$//' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+
+        if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            continue
+        fi
+
         value="${value%\"}"
         value="${value#\"}"
-        
-        # Export variable
+
         export "$key=$value"
     done < "$config_file"
 }
@@ -157,8 +188,13 @@ apply_proxy() {
         export HTTPS_PROXY="${HTTPS_PROXY:-$HTTP_PROXY}"
         export http_proxy="${http_proxy:-$HTTP_PROXY}"
         export https_proxy="${https_proxy:-$HTTPS_PROXY}"
+        export ALL_PROXY="${ALL_PROXY:-${HTTPS_PROXY:-$HTTP_PROXY}}"
         export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1}"
         export no_proxy="${no_proxy:-$NO_PROXY}"
+        if [ "$USE_INTERNAL_NPM_REGISTRY" != true ]; then
+            export npm_config_proxy="${npm_config_proxy:-$HTTP_PROXY}"
+            export npm_config_https_proxy="${npm_config_https_proxy:-$HTTPS_PROXY}"
+        fi
         echo -e "${BLUE}ℹ${NC} Using HTTP proxy: ${HTTP_PROXY:-$HTTPS_PROXY}"
         if [ -w /etc/apt/apt.conf.d ] 2>/dev/null; then
             local apt_proxy="${HTTP_PROXY:-$HTTPS_PROXY}"
@@ -171,6 +207,24 @@ apply_proxy() {
 }
 
 apply_proxy
+
+configure_internal_npm_registry() {
+    if [ "$USE_INTERNAL_NPM_REGISTRY" = true ]; then
+        export npm_config_registry="$INTERNAL_NPM_REGISTRY"
+        export NPM_CONFIG_REGISTRY="$INTERNAL_NPM_REGISTRY"
+        export YARN_REGISTRY="$INTERNAL_NPM_REGISTRY"
+        export YARN_NPM_REGISTRY_SERVER="$INTERNAL_NPM_REGISTRY"
+
+        unset npm_config_proxy npm_config_https_proxy NPM_CONFIG_PROXY NPM_CONFIG_HTTPS_PROXY
+        export npm_config_noproxy="*"
+        export NPM_CONFIG_NOPROXY="*"
+
+        print_info "Using internal npm registry: $INTERNAL_NPM_REGISTRY"
+        print_info "npm/yarn proxy is disabled for package downloads"
+    fi
+}
+
+configure_internal_npm_registry
 
 ###############################################################################
 # Helper Functions
@@ -202,6 +256,30 @@ print_warning() {
 
 print_step() {
     echo -e "${CYAN}▶${NC} ${1}"
+}
+
+run_git() {
+    if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
+        git -c http.proxy="${HTTP_PROXY:-$HTTPS_PROXY}" -c https.proxy="${HTTPS_PROXY:-$HTTP_PROXY}" "$@"
+    else
+        git "$@"
+    fi
+}
+
+convert_github_ssh_to_https() {
+    local remote="$1"
+
+    if [[ "$remote" =~ ^git@github\.com:(.+)$ ]]; then
+        echo "https://github.com/${BASH_REMATCH[1]}"
+        return
+    fi
+
+    if [[ "$remote" =~ ^ssh://git@github\.com/(.+)$ ]]; then
+        echo "https://github.com/${BASH_REMATCH[1]}"
+        return
+    fi
+
+    echo "$remote"
 }
 
 # Check if running as root
@@ -518,16 +596,21 @@ clone_or_update_project() {
         cd "$project_path"
         
         # Get current commit hash
-        local old_hash=$(git rev-parse HEAD 2>/dev/null || echo "")
+        local old_hash=$(run_git rev-parse HEAD 2>/dev/null || echo "")
         
         # Stash any local changes
-        git stash save "Auto-stash before pull at $(date)" 2>/dev/null || true
+        run_git stash save "Auto-stash before pull at $(date)" 2>/dev/null || true
         
         # Pull latest changes
-        git pull origin main || git pull origin master
+        local pull_remote="origin"
+        local origin_url=$(run_git remote get-url origin 2>/dev/null || echo "")
+        if [ -n "$origin_url" ] && ([ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]); then
+            pull_remote=$(convert_github_ssh_to_https "$origin_url")
+        fi
+        run_git pull "$pull_remote" main || run_git pull "$pull_remote" master
         
         # Get new commit hash
-        local new_hash=$(git rev-parse HEAD 2>/dev/null || echo "")
+        local new_hash=$(run_git rev-parse HEAD 2>/dev/null || echo "")
         
         # Store whether changes occurred (global variable for build decisions)
         if [ "$old_hash" = "$new_hash" ]; then
@@ -535,7 +618,7 @@ clone_or_update_project() {
             print_success "$project_name is up to date (no changes)"
         else
             eval "${repo_name//-/_}_HAS_CHANGES=true"
-            print_success "$project_name updated ($(git log --oneline $old_hash..$new_hash 2>/dev/null | wc -l) new commits)"
+            print_success "$project_name updated ($(run_git log --oneline $old_hash..$new_hash 2>/dev/null | wc -l) new commits)"
         fi
     else
         print_info "Cloning $project_name..."
@@ -544,6 +627,9 @@ clone_or_update_project() {
         
         # Try to clone
         local repo_base_url="git@github.com:$GITHUB_USERNAME"
+        if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
+            repo_base_url="https://github.com/$GITHUB_USERNAME"
+        fi
         
         # Check if local copy exists (for development)
         if [ -d "/home/mehdi/all/repositories/github.com/$repo_name" ]; then
@@ -552,7 +638,7 @@ clone_or_update_project() {
             print_success "$project_name copied from local"
         else
             # Clone from git using SSH
-            git clone "$repo_base_url/$repo_name.git" || {
+            run_git clone "$repo_base_url/$repo_name.git" || {
                 print_error "Failed to clone $repo_name. Please check:"
                 print_error "  1. SSH keys are set up correctly"
                 print_error "  2. Repository exists: $repo_base_url/$repo_name.git"
@@ -715,6 +801,32 @@ build_backend() {
     fi
 }
 
+install_npm_dependencies() {
+    local npm_cache_dir="$1"
+    local npm_ci_log="/tmp/npm_ci_${$}_$(date +%s%N).log"
+
+    if npm ci --cache "$npm_cache_dir" > "$npm_ci_log" 2>&1; then
+        cat "$npm_ci_log"
+        rm -f "$npm_ci_log"
+        return 0
+    fi
+
+    if grep -q "can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync" "$npm_ci_log" || \
+       grep -q "Missing:" "$npm_ci_log"; then
+        print_warning "npm ci failed due to lockfile mismatch; falling back to npm install"
+        if [ "$DEBUG_COMMANDS" = true ]; then
+            cat "$npm_ci_log"
+        fi
+        rm -f "$npm_ci_log"
+        npm install --cache "$npm_cache_dir"
+        return 0
+    fi
+
+    cat "$npm_ci_log"
+    rm -f "$npm_ci_log"
+    return 1
+}
+
 build_storefront() {
     local BUILD_LOG_FILE="/tmp/build_storefront_$$.log"
     {
@@ -727,7 +839,7 @@ build_storefront() {
         
         export NODE_OPTIONS="--max-old-space-size=4096"
         
-        npm ci --cache "$NPM_CACHE_DIR" 2>&1 || npm install --cache "$NPM_CACHE_DIR" 2>&1
+        install_npm_dependencies "$NPM_CACHE_DIR" 2>&1
         NODE_ENV=production npm run build 2>&1
         
         unset NODE_OPTIONS
@@ -754,7 +866,7 @@ build_vendor_panel() {
         
         export NODE_OPTIONS="--max-old-space-size=2048"
         
-        npm ci --cache "$NPM_CACHE_DIR" 2>&1 || npm install --cache "$NPM_CACHE_DIR" 2>&1
+        install_npm_dependencies "$NPM_CACHE_DIR" 2>&1
         npm run build:preview 2>&1
         
         unset NODE_OPTIONS
@@ -1677,7 +1789,7 @@ EOF
         echo ""
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             cd "$MAILCOW_DIR"
-            git pull
+            run_git pull
             
             print_info "Configuring Mailcow to avoid port conflicts..."
             if [ -f mailcow.conf ]; then
@@ -1798,14 +1910,7 @@ NGINXMAIL
     
     print_info "Cloning Mailcow repository..."
     cd /opt
-    
-    if [ -n "${HTTP_PROXY}" ] || [ -n "${HTTPS_PROXY}" ]; then
-        print_info "Using proxy for git clone..."
-        git config --global http.proxy "${HTTP_PROXY:-$HTTPS_PROXY}"
-        git config --global https.proxy "${HTTPS_PROXY:-$HTTP_PROXY}"
-    fi
-    
-    git clone https://github.com/mailcow/mailcow-dockerized
+    run_git clone https://github.com/mailcow/mailcow-dockerized
     cd mailcow-dockerized
     print_success "Repository cloned"
     
