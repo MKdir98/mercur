@@ -70,6 +70,13 @@ SMS_IR_SANDBOX_LINE_NUMBER=sandbox_line
 # Feature Flags
 DISABLE_SELLERS_REGISTRATION=false
 
+# Storefront: show prices in USD (NEXT_PUBLIC_DISPLAY_PRICES_IN_USD on storefront; toman_per_usd from admin store metadata)
+# DISPLAY_PRICES_IN_USD=false
+# NEXT_PUBLIC_DISPLAY_PRICES_IN_USD=false
+
+# Backend: fixed shipping in Rial for Postex option — skips Postex rate + parcel APIs (empty = use real Postex)
+# POSTEX_FLAT_SHIPPING_AMOUNT_RIAL=
+
 # Storefront auth: phone | email (must match storefront NEXT_PUBLIC_AUTH_REGISTRATION_CHANNEL)
 AUTH_REGISTRATION_CHANNEL=phone
 

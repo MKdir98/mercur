@@ -1,6 +1,22 @@
 import { AbstractFulfillmentProviderService, Modules, ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { PostexClient } from "../../integrations/postex/client"
 
+function getPostexFlatShippingAmountRial(): number | null {
+  const raw = process.env.POSTEX_FLAT_SHIPPING_AMOUNT_RIAL
+  if (raw === undefined || raw === null) {
+    return null
+  }
+  const trimmed = String(raw).trim()
+  if (trimmed === "") {
+    return null
+  }
+  const n = Number(trimmed)
+  if (Number.isNaN(n) || n < 0) {
+    return null
+  }
+  return Math.round(n)
+}
+
 class PostexService extends AbstractFulfillmentProviderService {
   static identifier = "postex"
   static LIFE_TIME = "SCOPED"
@@ -59,11 +75,19 @@ class PostexService extends AbstractFulfillmentProviderService {
 
   async calculatePrice(optionData, data, context) {
     try {
-      // 1. Get cart_id from context or data
       const cartId = context?.id || context?.cart_id || data?.cart_id
       
       if (!cartId) {
         throw new Error('خطا در استعلام هزینه ارسال: اطلاعات سبد خرید یافت نشد')
+      }
+
+      const flatRial = getPostexFlatShippingAmountRial()
+      if (flatRial !== null) {
+        return {
+          calculated_amount: flatRial,
+          is_calculated: true,
+          is_calculated_price_tax_inclusive: false,
+        }
       }
 
       const cart = context
@@ -275,6 +299,55 @@ class PostexService extends AbstractFulfillmentProviderService {
 
       if (!order) {
         throw new Error('خطا در ثبت مرسوله پستکس: سفارش یافت نشد')
+      }
+
+      const flatRial = getPostexFlatShippingAmountRial()
+      if (flatRial !== null) {
+        const shippingMethodFlat = order.shipping_methods?.[0]
+        if (!shippingMethodFlat) {
+          throw new Error('خطا در ثبت مرسوله پستکس: روش ارسال یافت نشد')
+        }
+        const {
+          data: [shippingOptionFlat]
+        } = await query.graph({
+          entity: 'shipping_option',
+          fields: ['id', 'provider_id'],
+          filters: {
+            id: shippingMethodFlat.shipping_option_id
+          }
+        })
+        if (!shippingOptionFlat?.provider_id?.includes('postex')) {
+          throw new Error('این سفارش از نوع پستکس نیست')
+        }
+        const shipmentIdFlat = `postex_flat_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+        await knex.raw(
+          `INSERT INTO postex_shipment (
+            id,
+            fulfillment_id,
+            order_id,
+            postex_parcel_id,
+            postex_tracking_code,
+            postex_request_data,
+            postex_response_data,
+            pickup_requested_at,
+            status,
+            created_at,
+            updated_at
+          ) VALUES (?, ?, ?, NULL, NULL, ?, ?, NOW(), 'confirmed', NOW(), NOW())`,
+          [
+            shipmentIdFlat,
+            fulfillmentId,
+            orderId,
+            JSON.stringify({ mode: 'flat_shipping', amount_rial: flatRial }),
+            JSON.stringify({ mode: 'flat_shipping' })
+          ]
+        )
+        return {
+          tracking_number: 'FLAT-SHIPPING',
+          tracking_url: '#',
+          label_url: '#',
+          postex_parcel_id: null
+        }
       }
 
       const deliveryAddress = order.shipping_address

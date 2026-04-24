@@ -653,6 +653,44 @@ clone_or_update_project() {
     fi
 }
 
+property_file_defines_key() {
+    local config_file="$1"
+    local key="$2"
+    [ -f "$config_file" ] || return 1
+    grep -qE "^[[:space:]]*${key}=" "$config_file" 2>/dev/null
+}
+
+upsert_env_line_into_env_file() {
+    local env_file="$1"
+    local key="$2"
+    local value="$3"
+    [ -f "$env_file" ] || return 0
+    local tmp
+    tmp="$(mktemp)"
+    (
+        if grep -q "^${key}=" "$env_file" 2>/dev/null; then
+            grep -v "^${key}=" "$env_file"
+        else
+            cat "$env_file"
+        fi
+        printf '%s=%s\n' "$key" "$value"
+    ) > "$tmp" && mv "$tmp" "$env_file"
+}
+
+sync_deployment_env_from_properties() {
+    local storefront_env="$DEPLOY_DIR/$STOREFRONT_REPO/.env.production"
+    local backend_env="$DEPLOY_DIR/$BACKEND_REPO/apps/backend/.env"
+    local props="$CONFIG_FILE"
+    if property_file_defines_key "$props" "NEXT_PUBLIC_DISPLAY_PRICES_IN_USD" || \
+       property_file_defines_key "$props" "DISPLAY_PRICES_IN_USD"; then
+        local display_usd="${NEXT_PUBLIC_DISPLAY_PRICES_IN_USD:-${DISPLAY_PRICES_IN_USD:-false}}"
+        upsert_env_line_into_env_file "$storefront_env" "NEXT_PUBLIC_DISPLAY_PRICES_IN_USD" "$display_usd"
+    fi
+    if property_file_defines_key "$props" "POSTEX_FLAT_SHIPPING_AMOUNT_RIAL"; then
+        upsert_env_line_into_env_file "$backend_env" "POSTEX_FLAT_SHIPPING_AMOUNT_RIAL" "${POSTEX_FLAT_SHIPPING_AMOUNT_RIAL:-}"
+    fi
+}
+
 setup_env_files() {
     print_step "Setting up environment files..."
     
@@ -686,6 +724,9 @@ NEXT_PUBLIC_SITE_DESCRIPTION="${SITE_DESCRIPTION:-Your Marketplace Description}"
 # Algolia
 NEXT_PUBLIC_ALGOLIA_ID=${ALGOLIA_APP_ID:-your_algolia_id}
 NEXT_PUBLIC_ALGOLIA_SEARCH_KEY=${ALGOLIA_SEARCH_KEY:-your_algolia_key}
+
+# USD price display on storefront (optional; set DISPLAY_PRICES_IN_USD or NEXT_PUBLIC_DISPLAY_PRICES_IN_USD in .properties)
+NEXT_PUBLIC_DISPLAY_PRICES_IN_USD=${NEXT_PUBLIC_DISPLAY_PRICES_IN_USD:-${DISPLAY_PRICES_IN_USD:-false}}
 
 # SMS - Frontend does NOT need these anymore (handled by backend)
 # NEXT_PUBLIC_ENABLE_SMS_DEBUG_PANEL=false
@@ -754,6 +795,8 @@ SMS_IR_SANDBOX_LINE_NUMBER=${SMS_IR_SANDBOX_LINE_NUMBER:-sandbox_line}
 
 # Postex Shipping Configuration
 POSTEX_API_KEY=${POSTEX_API_KEY:-your_postex_api_key_here}
+# Fixed Rial shipping (optional; skips Postex API when set — use with USD display / demos)
+POSTEX_FLAT_SHIPPING_AMOUNT_RIAL=${POSTEX_FLAT_SHIPPING_AMOUNT_RIAL:-}
 EOF
         print_warning "Created $backend_env - PLEASE EDIT IT!"
     else
@@ -774,6 +817,8 @@ EOF
     else
         print_success "Vendor Panel .env.production exists"
     fi
+
+    sync_deployment_env_from_properties
 }
 
 build_backend() {
@@ -1463,6 +1508,8 @@ update_only() {
         print_error "Environment files not found! Please run 'deploy' first."
         exit 1
     fi
+
+    sync_deployment_env_from_properties
     
     # Build projects (parallel builds with smart rebuild)
     build_projects
