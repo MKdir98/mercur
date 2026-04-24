@@ -80,6 +80,10 @@ export const storeMiddlewares: MiddlewareRoute[] = [
     middlewares: [bypassAuthInLocalDemo]
   },
   {
+    matcher: '/store/customers/email/*',
+    middlewares: [bypassAuthInLocalDemo]
+  },
+  {
     matcher: '/store/customer/*',
     middlewares: [bypassAuthInLocalDemo]
   },
@@ -110,6 +114,10 @@ export const storeMiddlewares: MiddlewareRoute[] = [
   },
   {
     matcher: '/store/homepage-media',
+    middlewares: [bypassAuthInLocalDemo]
+  },
+  {
+    matcher: '/store/price-display-config',
     middlewares: [bypassAuthInLocalDemo]
   },
   {

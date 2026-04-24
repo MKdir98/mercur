@@ -1,7 +1,7 @@
 import crypto from "crypto"
 
 export interface VerificationTokenData {
-  phone: string
+  subjectKey: string
   expiresAt: number
 }
 
@@ -12,13 +12,12 @@ function generateToken(): string {
   return crypto.randomBytes(32).toString("hex")
 }
 
-export function createVerificationToken(phone: string): string {
-  const normalizedPhone = phone.replace(/[^0-9+]/g, "")
+export function createVerificationToken(subjectKey: string): string {
   const token = generateToken()
   const expiresAt = Date.now() + VERIFICATION_TOKEN_EXPIRY_MINUTES * 60 * 1000
 
   tokenStore.set(token, {
-    phone: normalizedPhone,
+    subjectKey,
     expiresAt,
   })
 
@@ -27,16 +26,15 @@ export function createVerificationToken(phone: string): string {
 
 export function consumeVerificationToken(
   token: string,
-  phone: string
+  subjectKey: string
 ): boolean {
-  const normalizedPhone = phone.replace(/[^0-9+]/g, "")
   const data = tokenStore.get(token)
 
   if (!data) {
     return false
   }
 
-  if (data.phone !== normalizedPhone) {
+  if (data.subjectKey !== subjectKey) {
     return false
   }
 

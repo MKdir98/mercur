@@ -247,10 +247,10 @@ const ProductAttributeInfo = ({ product }: { product: ProductDTO }) => {
       <div className="flex items-center justify-between px-6 py-4">
         <Heading level="h2">Attributes</Heading>
       </div>
-      <SectionRow title={"Height"} value={product.height} />
-      <SectionRow title={"Width"} value={product.width} />
-      <SectionRow title={"Length"} value={product.length} />
-      <SectionRow title={"Weight"} value={product.weight} />
+      <SectionRow title={"Height (cm)"} value={product.height} />
+      <SectionRow title={"Width (cm)"} value={product.width} />
+      <SectionRow title={"Length (cm)"} value={product.length} />
+      <SectionRow title={"Weight (g)"} value={product.weight} />
       <SectionRow title={"Mid code"} value={product.mid_code} />
       <SectionRow title={"Hs code"} value={product.hs_code} />
       <SectionRow title={"Country of origin"} value={product.origin_country} />

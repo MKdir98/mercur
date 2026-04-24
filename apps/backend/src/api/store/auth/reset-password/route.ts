@@ -1,82 +1,55 @@
-/**
- * بازیابی رمز عبور
- * Reset password after OTP verification
- */
-
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
 import bcrypt from "bcrypt"
+import { getRegistrationChannel } from "../../../../lib/auth/registration-channel"
+import { otpSubjectKey } from "../../../../lib/otp/otp-subject"
 import { consumeVerificationToken } from "../../../../lib/otp/verification-token-store"
 
-/**
- * @oas [post] /store/auth/reset-password
- * operationId: "ResetPassword"
- * summary: "Reset password"
- * description: "Reset user password after OTP verification"
- * requestBody:
- *   required: true
- *   content:
- *     application/json:
- *       schema:
- *         type: object
- *         required:
- *           - phone
- *           - newPassword
- *         properties:
- *           phone:
- *             type: string
- *           newPassword:
- *             type: string
- * x-authenticated: false
- * responses:
- *   "200":
- *     description: OK
- *     content:
- *       application/json:
- *         schema:
- *           type: object
- *           properties:
- *             success:
- *               type: boolean
- *             message:
- *               type: string
- *   "400":
- *     description: Bad Request
- *   "404":
- *     description: Customer not found
- *   "500":
- *     description: Internal Server Error
- * tags:
- *   - Store - Auth
- */
 export async function POST(
   req: MedusaRequest,
   res: MedusaResponse
 ): Promise<void> {
-  const {
-    phone,
-    newPassword,
-    verificationToken,
-  } = req.body as {
+  const { phone, email, newPassword, verificationToken } = req.body as {
     phone?: string
+    email?: string
     newPassword?: string
     verificationToken?: string
   }
 
-  if (!phone) {
-    res.status(400).json({
-      success: false,
-      message: "شماره تلفن الزامی است",
-    })
-    return
+  const channel = getRegistrationChannel()
+
+  let subjectKey: string
+  if (channel === "email") {
+    const raw = email?.trim()
+    if (!raw) {
+      res.status(400).json({
+        success: false,
+        message: "ایمیل الزامی است",
+      })
+      return
+    }
+    subjectKey = otpSubjectKey("email", raw)
+  } else {
+    if (!phone) {
+      res.status(400).json({
+        success: false,
+        message: "شماره تلفن الزامی است",
+      })
+      return
+    }
+    subjectKey = otpSubjectKey("phone", phone)
   }
 
-  const normalizedPhone = phone.replace(/[^0-9+]/g, '')
-
-  if (!verificationToken || !consumeVerificationToken(verificationToken, normalizedPhone)) {
+  if (
+    !verificationToken ||
+    !consumeVerificationToken(verificationToken, subjectKey)
+  ) {
     res.status(403).json({
       success: false,
-      message: "تایید شماره تلفن منقضی شده است. لطفاً دوباره کد تایید دریافت کنید",
+      message:
+        channel === "email"
+          ? "تایید ایمیل منقضی شده است. لطفاً دوباره کد تایید دریافت کنید"
+          : "تایید شماره تلفن منقضی شده است. لطفاً دوباره کد تایید دریافت کنید",
     })
     return
   }
@@ -93,29 +66,45 @@ export async function POST(
     const query = req.scope.resolve("query")
     const customerModule = req.scope.resolve(Modules.CUSTOMER)
 
-    // پیدا کردن customer با phone
-    const { data: customers } = await query.graph({
-      entity: "customer",
-      fields: ["id", "email", "metadata"],
-      filters: {
-        phone: normalizedPhone,
-      },
-    })
+    let customer: {
+      id: string
+      metadata?: Record<string, unknown> | null
+    } | null = null
 
-    const customer = customers && customers.length > 0 ? customers[0] : null
-
-    if (!customer) {
-      res.status(404).json({
-        success: false,
-        message: "کاربر با این شماره تلفن یافت نشد",
+    if (channel === "email") {
+      const { data: customers } = await query.graph({
+        entity: "customer",
+        fields: ["id", "metadata"],
+        filters: { email: subjectKey },
       })
-      return
+      customer = customers && customers.length > 0 ? customers[0] : null
+
+      if (!customer) {
+        res.status(404).json({
+          success: false,
+          message: "کاربر با این ایمیل یافت نشد",
+        })
+        return
+      }
+    } else {
+      const { data: customers } = await query.graph({
+        entity: "customer",
+        fields: ["id", "metadata"],
+        filters: { phone: subjectKey },
+      })
+      customer = customers && customers.length > 0 ? customers[0] : null
+
+      if (!customer) {
+        res.status(404).json({
+          success: false,
+          message: "کاربر با این شماره تلفن یافت نشد",
+        })
+        return
+      }
     }
 
-    // Hash کردن password جدید
     const newPasswordHash = await bcrypt.hash(newPassword, 10)
 
-    // آپدیت کردن customer با password جدید
     await customerModule.updateCustomers(customer.id, {
       metadata: {
         ...customer.metadata,
@@ -136,4 +125,3 @@ export async function POST(
     })
   }
 }
-
