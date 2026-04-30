@@ -689,6 +689,12 @@ sync_deployment_env_from_properties() {
     if property_file_defines_key "$props" "POSTEX_FLAT_SHIPPING_AMOUNT_RIAL"; then
         upsert_env_line_into_env_file "$backend_env" "POSTEX_FLAT_SHIPPING_AMOUNT_RIAL" "${POSTEX_FLAT_SHIPPING_AMOUNT_RIAL:-}"
     fi
+    local _rem_key
+    for _rem_key in USE_REMITATION_PAYMENT_GATEWAY REMITATION_ACCESS_KEY REMITATION_SECRET_KEY REMITATION_API_BASE_URL REMITATION_PAYMENT_PROVIDER REMITATION_PAYMENT_CURRENCY REMITATION_RIAL_PER_USD; do
+        if property_file_defines_key "$props" "$_rem_key"; then
+            upsert_env_line_into_env_file "$backend_env" "$_rem_key" "${!_rem_key:-}"
+        fi
+    done
 }
 
 setup_env_files() {
@@ -797,6 +803,15 @@ SMS_IR_SANDBOX_LINE_NUMBER=${SMS_IR_SANDBOX_LINE_NUMBER:-sandbox_line}
 POSTEX_API_KEY=${POSTEX_API_KEY:-your_postex_api_key_here}
 # Fixed Rial shipping (optional; skips Postex API when set — use with USD display / demos)
 POSTEX_FLAT_SHIPPING_AMOUNT_RIAL=${POSTEX_FLAT_SHIPPING_AMOUNT_RIAL:-}
+
+# Remitation international card (optional; USE_REMITATION_PAYMENT_GATEWAY=true replaces Zarinpal provider)
+USE_REMITATION_PAYMENT_GATEWAY=${USE_REMITATION_PAYMENT_GATEWAY:-false}
+REMITATION_ACCESS_KEY=${REMITATION_ACCESS_KEY:-}
+REMITATION_SECRET_KEY=${REMITATION_SECRET_KEY:-}
+REMITATION_API_BASE_URL=${REMITATION_API_BASE_URL:-https://api.merchant.remitation.com/api}
+REMITATION_PAYMENT_PROVIDER=${REMITATION_PAYMENT_PROVIDER:-stripe}
+REMITATION_PAYMENT_CURRENCY=${REMITATION_PAYMENT_CURRENCY:-USD}
+REMITATION_RIAL_PER_USD=${REMITATION_RIAL_PER_USD:-}
 EOF
         print_warning "Created $backend_env - PLEASE EDIT IT!"
     else
@@ -1179,7 +1194,7 @@ server {
         proxy_send_timeout 120s;
         proxy_read_timeout 120s;
         
-        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        proxy_next_upstream error timeout http_502 http_503 http_504;
         proxy_next_upstream_tries 2;
         proxy_next_upstream_timeout 10s;
     }

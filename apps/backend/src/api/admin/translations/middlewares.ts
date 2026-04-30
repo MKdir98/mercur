@@ -29,6 +29,7 @@ export const translationsMiddleware: MiddlewareRoute[] = [
   {
     method: ["POST"],
     matcher: "/admin/translations/import",
+    bodyParser: false,
     middlewares: [upload.single('file')],
   },
   {

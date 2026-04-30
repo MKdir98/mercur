@@ -2,6 +2,38 @@ import { defineConfig, loadEnv } from '@medusajs/framework/utils'
 
 loadEnv(process.env.NODE_ENV || 'development', process.cwd())
 
+const useRemitationPaymentGateway =
+  process.env.USE_REMITATION_PAYMENT_GATEWAY === 'true'
+
+const domesticCardPaymentProvider = useRemitationPaymentGateway
+  ? {
+      resolve: '@mercurjs/payment-remitation',
+      id: 'remitation',
+      options: {
+        accessKey: process.env.REMITATION_ACCESS_KEY || '',
+        secretKey: process.env.REMITATION_SECRET_KEY || '',
+        baseUrl:
+          process.env.REMITATION_API_BASE_URL ||
+          'https://api.merchant.remitation.com/api',
+        provider:
+          process.env.REMITATION_PAYMENT_PROVIDER === 'mollie'
+            ? 'mollie'
+            : 'stripe',
+        currency: process.env.REMITATION_PAYMENT_CURRENCY || 'USD',
+        rialPerUsd: process.env.REMITATION_RIAL_PER_USD
+          ? parseFloat(process.env.REMITATION_RIAL_PER_USD)
+          : undefined
+      }
+    }
+  : {
+      resolve: '@mercurjs/payment-zarinpal',
+      id: 'zarinpal',
+      options: {
+        merchantId: process.env.ZARINPAL_MERCHANT_ID,
+        sandbox: process.env.ZARINPAL_SANDBOX === 'true'
+      }
+    }
+
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
@@ -88,14 +120,7 @@ module.exports = defineConfig({
               apiKey: process.env.STRIPE_SECRET_API_KEY
             }
           },
-          {
-            resolve: '@mercurjs/payment-zarinpal',
-            id: 'zarinpal',
-            options: {
-              merchantId: process.env.ZARINPAL_MERCHANT_ID,
-              sandbox: process.env.ZARINPAL_SANDBOX === 'true'
-            }
-          }
+          domesticCardPaymentProvider
         ]
       }
     },

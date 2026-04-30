@@ -6,6 +6,7 @@ export const vendorUploadMiddlewares: MiddlewareRoute[] = [
   {
     method: ['POST'],
     matcher: '/vendor/uploads',
+    bodyParser: false,
     middlewares: [multerFilesArray('files')]
   }
 ]

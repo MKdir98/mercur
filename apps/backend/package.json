@@ -52,6 +52,7 @@
     "@mercurjs/marketplace": "*",
     "@mercurjs/order-return-request": "*",
     "@mercurjs/payment-stripe-connect": "*",
+    "@mercurjs/payment-remitation": "*",
     "@mercurjs/payment-zarinpal": "*",
     "@mercurjs/payout": "*",
     "@mercurjs/requests": "*",

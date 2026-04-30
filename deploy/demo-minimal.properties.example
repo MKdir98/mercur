@@ -77,8 +77,30 @@ DISABLE_SELLERS_REGISTRATION=false
 # Backend: fixed shipping in Rial for Postex option — skips Postex rate + parcel APIs (empty = use real Postex)
 # POSTEX_FLAT_SHIPPING_AMOUNT_RIAL=
 
+# Backend: Remitation (international card via Stripe/Mollie) instead of Zarinpal when true
+# USE_REMITATION_PAYMENT_GATEWAY=false
+# REMITATION_HTTP_PROXY=http://localhost:2080
+# REMITATION_ACCESS_KEY=
+# REMITATION_SECRET_KEY=
+# REMITATION_API_BASE_URL=https://api.merchant.remitation.com/api
+# REMITATION_PAYMENT_PROVIDER=stripe
+# REMITATION_PAYMENT_CURRENCY=USD
+# REMITATION_RIAL_PER_USD=
+# Remitation: no sandbox env; test links come from test merchant / Stripe test mode in Remitation
+
 # Storefront auth: phone | email (must match storefront NEXT_PUBLIC_AUTH_REGISTRATION_CHANNEL)
 AUTH_REGISTRATION_CHANNEL=phone
+
+# GET /store/payment-providers: log filtered provider ids (backend)
+# LOG_PAYMENT_PROVIDERS=true
+# LOG_PAYMENT_REGION=true
+# SKIP_PAYMENT_PROVIDER_GATEWAY_FILTER=true
+
+# Backend: Medusa region id (reg_...) forced on all store carts; clients cannot use another region for pricing/tax/checkout
+# STORE_LOCKED_REGION_ID=
+# ISO-2 comma list: allow shipping to these countries even if not linked to the cart region (e.g. NonIran cart + ir address)
+# STORE_EXTRA_SHIPPING_COUNTRY_CODES=ir
+# LOG_CROSS_REGION_CART=true
 
 # OTP email (when AUTH_REGISTRATION_CHANNEL=email)
 # OTP_EMAIL_PROVIDER=resend

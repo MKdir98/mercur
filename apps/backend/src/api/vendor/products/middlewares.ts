@@ -82,6 +82,7 @@ export const vendorProductsMiddlewares: MiddlewareRoute[] = [
   {
     method: ['POST'],
     matcher: '/vendor/products/import',
+    bodyParser: false,
     middlewares: [
       checkConfigurationRule(
         ConfigurationRuleType.PRODUCT_IMPORT_ENABLED,
