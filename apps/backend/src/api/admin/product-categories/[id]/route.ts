@@ -8,6 +8,8 @@ type AdminUpdateProductCategoryBody = {
   description?: string
   parent_category_id?: string | null
   metadata?: Record<string, unknown>
+  is_active?: boolean
+  is_internal?: boolean
 }
 
 export const PATCH = async (
@@ -23,6 +25,8 @@ export const PATCH = async (
   if (body.description !== undefined) update.description = body.description
   if (body.parent_category_id !== undefined) update.parent_category_id = body.parent_category_id
   if (body.metadata !== undefined) update.metadata = body.metadata
+  if (body.is_active !== undefined) update.is_active = body.is_active
+  if (body.is_internal !== undefined) update.is_internal = body.is_internal
 
   if (Object.keys(update).length === 0) {
     throw new MedusaError(

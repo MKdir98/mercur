@@ -10,6 +10,7 @@ import {
   Text,
   Textarea,
   Select,
+  Switch,
   clx,
 } from "@medusajs/ui"
 import { useNavigate, useParams } from "react-router-dom"
@@ -38,6 +39,8 @@ const EditCategoryPage = () => {
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
   const [existingThumbnailUrl, setExistingThumbnailUrl] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isActive, setIsActive] = useState(true)
+  const [isInternal, setIsInternal] = useState(false)
 
   useEffect(() => {
     if (product_category) {
@@ -47,6 +50,8 @@ const EditCategoryPage = () => {
       setParentCategoryId(product_category.parent_category_id ?? null)
       const thumb = (product_category.metadata as Record<string, string> | undefined)?.thumbnail
       setExistingThumbnailUrl(thumb ?? null)
+      setIsActive((product_category as { is_active?: boolean }).is_active ?? true)
+      setIsInternal((product_category as { is_internal?: boolean }).is_internal ?? false)
     }
   }, [product_category])
 
@@ -128,6 +133,8 @@ const EditCategoryPage = () => {
         ...(handle.trim() && { handle: handle.trim() }),
         ...(description.trim() && { description: description.trim() }),
         parent_category_id: parentCategoryId ?? null,
+        is_active: isActive,
+        is_internal: isInternal,
         metadata: {
           ...existingMeta,
           thumbnail: thumbnailUrl ?? null,
@@ -227,6 +234,38 @@ const EditCategoryPage = () => {
                   ))}
                 </Select.Content>
               </Select>
+            </div>
+            <div className="flex flex-col gap-3 border-y border-ui-border-base py-4">
+              <div className="flex items-start gap-3">
+                <Switch
+                  id="is_active"
+                  checked={isActive}
+                  onCheckedChange={setIsActive}
+                />
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="is_active" weight="plus">
+                    Active
+                  </Label>
+                  <Text size="small" className="text-ui-fg-subtle">
+                    Inactive categories are hidden from the storefront.
+                  </Text>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Switch
+                  id="is_internal"
+                  checked={isInternal}
+                  onCheckedChange={setIsInternal}
+                />
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="is_internal" weight="plus">
+                    Internal (admin only)
+                  </Label>
+                  <Text size="small" className="text-ui-fg-subtle">
+                    Hidden from customer-facing catalogs; visible in admin.
+                  </Text>
+                </div>
+              </div>
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="thumbnail">Thumbnail (optional)</Label>
