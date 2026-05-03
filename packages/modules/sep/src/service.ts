@@ -1,4 +1,5 @@
 import { MedusaService } from '@medusajs/framework/utils'
+import { resolveSepIpgEndpoints } from '@mercurjs/framework'
 import axios from 'axios'
 import { SepTransaction, SepTransactionStatus } from './models/sep-transaction'
 
@@ -43,17 +44,11 @@ class SepModuleService extends MedusaService({
     this.terminalId = config?.terminalId || process.env.SEP_TERMINAL_ID || ''
     this.sandbox = config?.sandbox ?? (process.env.SEP_SANDBOX === 'true')
 
-    if (this.sandbox) {
-      this.tokenUrl = 'https://sandbox.sep.shaparak.ir/onlinepg/onlinepg'
-      this.paymentGatewayUrl = 'https://sandbox.sep.shaparak.ir/OnlinePG/OnlinePG'
-      this.verifyUrl = 'https://sandbox.sep.shaparak.ir/verifyTxnRandomSessionkey/ipg/VerifyTransaction'
-      this.reverseUrl = 'https://sandbox.sep.shaparak.ir/verifyTxnRandomSessionkey/ipg/ReverseTransaction'
-    } else {
-      this.tokenUrl = 'https://sep.shaparak.ir/onlinepg/onlinepg'
-      this.paymentGatewayUrl = 'https://sep.shaparak.ir/OnlinePG/OnlinePG'
-      this.verifyUrl = 'https://sep.shaparak.ir/verifyTxnRandomSessionkey/ipg/VerifyTransaction'
-      this.reverseUrl = 'https://sep.shaparak.ir/verifyTxnRandomSessionkey/ipg/ReverseTransaction'
-    }
+    const ep = resolveSepIpgEndpoints(this.sandbox)
+    this.tokenUrl = ep.tokenUrl
+    this.paymentGatewayUrl = ep.paymentGatewayPostUrl
+    this.verifyUrl = ep.verifyUrl
+    this.reverseUrl = ep.reverseUrl
   }
 
   async requestPayment(

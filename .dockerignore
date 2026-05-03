@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+.git
+**/.git
+.turbo
+**/.turbo
+*.log
+.DS_Store
+**/.medusa
+dist
+**/dist
+coverage
+**/.next

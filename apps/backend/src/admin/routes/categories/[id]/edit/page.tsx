@@ -18,7 +18,7 @@ import { useProductCategory, useProductCategories } from "../../../../hooks/api/
 import { productCategoryQueryKeys } from "../../../../hooks/api/product_category"
 import { useQueryClient } from "@tanstack/react-query"
 import { mercurQuery } from "../../../../lib/client"
-import { useState, useMemo, useRef, useEffect } from "react"
+import { useState, useMemo, useRef, useEffect, useCallback } from "react"
 
 const ACCEPT_IMAGE = "image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
 
@@ -41,19 +41,32 @@ const EditCategoryPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isActive, setIsActive] = useState(true)
   const [isInternal, setIsInternal] = useState(false)
+  const syncedCategoryIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (product_category) {
-      setName(product_category.name ?? "")
-      setHandle(product_category.handle ?? "")
-      setDescription(product_category.description ?? "")
-      setParentCategoryId(product_category.parent_category_id ?? null)
-      const thumb = (product_category.metadata as Record<string, string> | undefined)?.thumbnail
+    syncedCategoryIdRef.current = null
+  }, [id])
+
+  const applyCategoryToForm = useCallback(
+    (cat: NonNullable<typeof product_category>) => {
+      setName(cat.name ?? "")
+      setHandle(cat.handle ?? "")
+      setDescription(cat.description ?? "")
+      setParentCategoryId(cat.parent_category_id ?? null)
+      const thumb = (cat.metadata as Record<string, string> | undefined)?.thumbnail
       setExistingThumbnailUrl(thumb ?? null)
-      setIsActive((product_category as { is_active?: boolean }).is_active ?? true)
-      setIsInternal((product_category as { is_internal?: boolean }).is_internal ?? false)
-    }
-  }, [product_category])
+      setIsActive((cat as { is_active?: boolean }).is_active ?? true)
+      setIsInternal((cat as { is_internal?: boolean }).is_internal ?? false)
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (!product_category || !id || product_category.id !== id) return
+    if (syncedCategoryIdRef.current === id) return
+    syncedCategoryIdRef.current = id
+    applyCategoryToForm(product_category)
+  }, [id, product_category, applyCategoryToForm])
 
   const NONE = "__none__"
   const categoryOptions = useMemo(() => {
@@ -248,21 +261,6 @@ const EditCategoryPage = () => {
                   </Label>
                   <Text size="small" className="text-ui-fg-subtle">
                     Inactive categories are hidden from the storefront.
-                  </Text>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <Switch
-                  id="is_internal"
-                  checked={isInternal}
-                  onCheckedChange={setIsInternal}
-                />
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="is_internal" weight="plus">
-                    Internal (admin only)
-                  </Label>
-                  <Text size="small" className="text-ui-fg-subtle">
-                    Hidden from customer-facing catalogs; visible in admin.
                   </Text>
                 </div>
               </div>

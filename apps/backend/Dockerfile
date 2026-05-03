@@ -1,56 +1,32 @@
+# Build context: repository root (mercur/), e.g. docker build -f apps/backend/Dockerfile .
 FROM node:20-alpine AS base
-
-# The web Dockerfile is copy-pasted into our main docs at /docs/handbook/deploying-with-docker.
-# Make sure you update this Dockerfile, the Dockerfile in the web workspace and copy that over to Dockerfile in the docs.
+RUN apk add --no-cache libc6-compat
 
 FROM base AS builder
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk update
-RUN apk add --no-cache libc6-compat
-# Set working directory
 WORKDIR /app
-RUN yarn global add turbo
+RUN yarn global add turbo@2.3.3
 COPY . .
 RUN turbo prune api --docker
 
-# Add lockfile and package.json's of isolated subworkspace
 FROM base AS installer
-RUN apk update
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache python3 make g++
 WORKDIR /app
-
-# First install dependencies (as they change less often)
 COPY --from=builder /app/out/json/ .
-RUN yarn install
-
-# Build the project and its dependencies
+COPY --from=builder /app/out/yarn.lock ./yarn.lock
+RUN yarn install --frozen-lockfile || yarn install
 COPY --from=builder /app/out/full/ .
-
-# Uncomment and use build args to enable remote caching
-# ARG TURBO_TEAM
-# ENV TURBO_TEAM=$TURBO_TEAM
-
-# ARG TURBO_TOKEN
-# ENV TURBO_TOKEN=$TURBO_TOKEN
-
-RUN yarn turbo build
+ENV NODE_OPTIONS=--max-old-space-size=4096
+RUN yarn turbo build --filter=api
 
 FROM base AS runner
 WORKDIR /app
-
-# Don't run production as root
-RUN addgroup --system --gid 1001 medusa
-RUN adduser --system --uid 1001 medusa
-
-# Ensure the medusa user owns the backend folder
-RUN mkdir -p /app/apps/backend/static
-RUN chown -R medusa:medusa /app/apps/backend
-
+RUN addgroup --system --gid 1001 medusa && adduser --system --uid 1001 medusa
+RUN mkdir -p /app/apps/backend/static && chown -R medusa:medusa /app
+COPY --from=installer --chown=medusa:medusa /app .
+COPY --chown=medusa:medusa apps/backend/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 USER medusa
-COPY --from=installer /app .
-
 WORKDIR /app/apps/backend
-
-RUN yarn db:migrate
-
-CMD ["yarn", "start"]
+EXPOSE 9000
+ENV NODE_ENV=production
+ENTRYPOINT ["/docker-entrypoint.sh"]

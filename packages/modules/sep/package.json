@@ -21,12 +21,12 @@
         "orm:cache:clear": "MIKRO_ORM_CLI_CONFIG=./mikro-orm.config.dev.ts medusa-mikro-orm cache:clear"
     },
     "dependencies": {
+        "@mercurjs/framework": "*",
         "axios": "^1.7.9"
     },
     "devDependencies": {
         "@medusajs/framework": "2.8.6",
         "@medusajs/test-utils": "2.8.6",
-        "@mercurjs/framework": "*",
         "@mikro-orm/cli": "6.4.3",
         "@mikro-orm/core": "6.4.3",
         "@mikro-orm/migrations": "6.4.3",

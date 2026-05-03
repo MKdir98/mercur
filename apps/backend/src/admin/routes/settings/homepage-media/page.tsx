@@ -20,6 +20,27 @@ import { clx } from "@medusajs/ui";
 const ACCEPT_IMAGE = "image/jpeg,image/png,image/gif,image/webp,image/svg+xml";
 const ACCEPT_VIDEO = "video/mp4,video/webm";
 
+/** Rewrites absolute URLs saved with a local backend host to the current admin origin. */
+function resolveMediaPreviewUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (typeof window === "undefined") {
+    return url;
+  }
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    try {
+      const parsed = new URL(url);
+      const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+      if (localHosts.has(parsed.hostname)) {
+        return `${window.location.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+      }
+      return url;
+    } catch {
+      return url;
+    }
+  }
+  return `${window.location.origin}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
 const uploadFile = async (file: File): Promise<string | undefined> => {
   const bearer =
     (typeof window !== "undefined" &&
@@ -89,11 +110,7 @@ const MediaCard = ({
     }
   };
 
-  const displayUrl = item.image_url?.startsWith("http")
-    ? item.image_url
-    : item.image_url
-      ? `${window.location.origin}${item.image_url.startsWith("/") ? "" : "/"}${item.image_url}`
-      : null;
+  const displayUrl = resolveMediaPreviewUrl(item.image_url);
 
   return (
     <div
@@ -180,11 +197,7 @@ const MediaCard = ({
             {item.video_url ? (
               <div className="flex items-center gap-2">
                 <video
-                  src={
-                    item.video_url.startsWith("http")
-                      ? item.video_url
-                      : `${window.location.origin}${item.video_url.startsWith("/") ? "" : "/"}${item.video_url}`
-                  }
+                  src={resolveMediaPreviewUrl(item.video_url) ?? undefined}
                   className="h-16 w-24 rounded object-cover border"
                   muted
                   playsInline

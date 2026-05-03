@@ -1,38 +1,40 @@
 import { defineConfig, loadEnv } from '@medusajs/framework/utils'
 
+import { buildDomesticIranPaymentProviders } from './src/lib/build-domestic-iran-payment-providers'
+import { IRAN_BANKTEST_SEP_CREDENTIALS } from '@mercurjs/framework'
+import {
+  effectiveSepSandbox,
+  effectiveZarinpalSandbox,
+} from './src/lib/iran-payment-sandbox'
+
 loadEnv(process.env.NODE_ENV || 'development', process.cwd())
 
 const useRemitationPaymentGateway =
   process.env.USE_REMITATION_PAYMENT_GATEWAY === 'true'
 
-const domesticCardPaymentProvider = useRemitationPaymentGateway
-  ? {
-      resolve: '@mercurjs/payment-remitation',
-      id: 'remitation',
-      options: {
-        accessKey: process.env.REMITATION_ACCESS_KEY || '',
-        secretKey: process.env.REMITATION_SECRET_KEY || '',
-        baseUrl:
-          process.env.REMITATION_API_BASE_URL ||
-          'https://api.merchant.remitation.com/api',
-        provider:
-          process.env.REMITATION_PAYMENT_PROVIDER === 'mollie'
-            ? 'mollie'
-            : 'stripe',
-        currency: process.env.REMITATION_PAYMENT_CURRENCY || 'USD',
-        rialPerUsd: process.env.REMITATION_RIAL_PER_USD
-          ? parseFloat(process.env.REMITATION_RIAL_PER_USD)
-          : undefined
+const domesticPaymentProviders = useRemitationPaymentGateway
+  ? [
+      {
+        resolve: '@mercurjs/payment-remitation',
+        id: 'remitation',
+        options: {
+          accessKey: process.env.REMITATION_ACCESS_KEY || '',
+          secretKey: process.env.REMITATION_SECRET_KEY || '',
+          baseUrl:
+            process.env.REMITATION_API_BASE_URL ||
+            'https://api.merchant.remitation.com/api',
+          provider:
+            process.env.REMITATION_PAYMENT_PROVIDER === 'mollie'
+              ? 'mollie'
+              : 'stripe',
+          currency: process.env.REMITATION_PAYMENT_CURRENCY || 'USD',
+          rialPerUsd: process.env.REMITATION_RIAL_PER_USD
+            ? parseFloat(process.env.REMITATION_RIAL_PER_USD)
+            : undefined
+        }
       }
-    }
-  : {
-      resolve: '@mercurjs/payment-zarinpal',
-      id: 'zarinpal',
-      options: {
-        merchantId: process.env.ZARINPAL_MERCHANT_ID,
-        sandbox: process.env.ZARINPAL_SANDBOX === 'true'
-      }
-    }
+    ]
+  : buildDomesticIranPaymentProviders()
 
 module.exports = defineConfig({
   projectConfig: {
@@ -71,14 +73,16 @@ module.exports = defineConfig({
       resolve: '@mercurjs/zarinpal',
       options: {
         merchantId: process.env.ZARINPAL_MERCHANT_ID,
-        sandbox: process.env.ZARINPAL_SANDBOX === 'true',
+        sandbox: effectiveZarinpalSandbox(),
       },
     },
     {
       resolve: '@mercurjs/sep',
       options: {
-        terminalId: process.env.SEP_TERMINAL_ID,
-        sandbox: process.env.SEP_SANDBOX === 'true',
+        terminalId:
+          process.env.SEP_TERMINAL_ID ||
+          (effectiveSepSandbox() ? IRAN_BANKTEST_SEP_CREDENTIALS.terminalId : ''),
+        sandbox: effectiveSepSandbox(),
       },
     },
     { resolve: '@mercurjs/split-order-payment' },
@@ -120,7 +124,7 @@ module.exports = defineConfig({
               apiKey: process.env.STRIPE_SECRET_API_KEY
             }
           },
-          domesticCardPaymentProvider
+          ...domesticPaymentProviders
         ]
       }
     },

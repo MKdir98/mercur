@@ -1,3 +1,8 @@
+import {
+  parseIranPaymentGatewayKeysFromEnv,
+  paymentProviderIdToIranGatewayKey,
+} from '../iran-payment-gateways'
+
 type ProviderRow = { id: string; is_enabled?: boolean }
 
 export type PaymentProviderFilterContext = {
@@ -33,12 +38,20 @@ export function applyGatewayEnvFilter(
   const useRemitation = useRemitationFromEnv()
   const before = providers.map((p) => p.id)
 
+  const iranGatewayAllowlist = parseIranPaymentGatewayKeysFromEnv()
+
   const filtered = providers.filter((p) => {
     const id = p.id.toLowerCase()
     const isZarinpal = id.includes("zarinpal")
     const isRemitation = id.includes("remitation")
     if (useRemitation) {
       return !isZarinpal
+    }
+    if (!isRemitation) {
+      const iranKey = paymentProviderIdToIranGatewayKey(p.id)
+      if (iranKey && !iranGatewayAllowlist.includes(iranKey)) {
+        return false
+      }
     }
     return !isRemitation
   })
