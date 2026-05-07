@@ -30,6 +30,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: 185.8.174.197:5000
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_PASS }}
 
       - name: Build and Push to both registries
         uses: docker/build-push-action@v6
