@@ -30,4 +30,4 @@ jobs:
           context: ./apps/backend
           file: ./apps/backend/Dockerfile
           push: true
-          tags: ghcr.io/<github-username>/mercur-backend:latest
+          tags: ghcr.io/${{ github.repository_owner }}/mercur-backend:latest
