@@ -25,14 +25,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Login to local registry (اگر auth داری)
-      - name: Login to Local Registry
-        uses: docker/login-action@v3
-        with:
-          registry: 185.8.174.197:5000
-          username: ${{ secrets.REGISTRY_USER }}
-          password: ${{ secrets.REGISTRY_PASS }}
-
       - name: Build and Push to both registries
         uses: docker/build-push-action@v6
         with:
@@ -41,4 +33,3 @@ jobs:
           push: true
           tags: |
             ghcr.io/mkdir98/mercur-backend:latest
-            185.8.174.197:5000/mercur-backend:latest
