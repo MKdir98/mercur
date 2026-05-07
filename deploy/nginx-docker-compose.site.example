@@ -1,0 +1,89 @@
+# نمونه برای Nginx روی میزبان وقتی اپ‌ها با docker compose بالا هستند (پورت‌ها روی loopback publish می‌شوند).
+# 1) دامنه‌ها را عوض کنید؛ 2) اگر پورت‌ها را در .env عوض کردید، upstreamها را هماهنگ کنید؛
+# 3) کپی مثلاً به /etc/nginx/sites-available/marketplace-docker و لینک به sites-enabled؛ 4) nginx -t && reload.
+#
+# پورت‌های پیش‌فرض همان docker-compose.yml: storefront 3000، backend 9000، vendor 5173
+
+upstream docker_marketplace_backend {
+    server 127.0.0.1:9000;
+    keepalive 64;
+}
+
+upstream docker_marketplace_storefront {
+    server 127.0.0.1:3000;
+    keepalive 64;
+}
+
+upstream docker_marketplace_vendor {
+    server 127.0.0.1:5173;
+    keepalive 32;
+}
+
+limit_req_zone $binary_remote_addr zone=docker_api_limit:10m rate=50r/s;
+limit_req_zone $binary_remote_addr zone=docker_general_limit:10m rate=100r/s;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name STOREFRONT_DOMAIN www.STOREFRONT_DOMAIN;
+
+    client_max_body_size 50M;
+
+    location / {
+        limit_req zone=docker_general_limit burst=50 nodelay;
+        proxy_pass http://docker_marketplace_storefront;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "";
+    }
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name BACKEND_DOMAIN;
+
+    client_max_body_size 100M;
+
+    location / {
+        limit_req zone=docker_api_limit burst=100 nodelay;
+        proxy_pass http://docker_marketplace_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "";
+        proxy_pass_header Set-Cookie;
+        proxy_pass_header Authorization;
+        proxy_cookie_path / /;
+        proxy_connect_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
+    }
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name VENDOR_DOMAIN;
+
+    client_max_body_size 50M;
+
+    location / {
+        limit_req zone=docker_general_limit burst=50 nodelay;
+        proxy_pass http://docker_marketplace_vendor;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "";
+    }
+}

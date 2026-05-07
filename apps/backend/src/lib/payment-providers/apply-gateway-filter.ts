@@ -39,7 +39,6 @@ export function applyGatewayEnvFilter(
   const before = providers.map((p) => p.id)
 
   const iranGatewayAllowlist = parseIranPaymentGatewayKeysFromEnv()
-
   const filtered = providers.filter((p) => {
     const id = p.id.toLowerCase()
     const isZarinpal = id.includes("zarinpal")
@@ -55,6 +54,7 @@ export function applyGatewayEnvFilter(
     }
     return !isRemitation
   })
+  console.log(filtered)
 
   if (shouldLogPaymentProviders()) {
     console.info("[payment-providers]", {

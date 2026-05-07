@@ -179,7 +179,7 @@ abstract class ParsianProvider extends AbstractPaymentProvider<Options> {
     const soapBody = `<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
-    <SalePaymentRequest xmlns="http://tempuri.org/">
+    <SalePaymentRequest xmlns="https://pec.Shaparak.ir/NewIPGServices/Sale/SaleService">
       <requestData>
         <LoginAccount>${escapeXml(this.options_.loginAccount)}</LoginAccount>
         <Amount>${numericAmount}</Amount>
@@ -199,9 +199,7 @@ abstract class ParsianProvider extends AbstractPaymentProvider<Options> {
       },
       validateStatus: () => true,
     })
-
     const parsed = parseSaleResult(typeof response.data === 'string' ? response.data : String(response.data))
-
     if (parsed.status !== 0 || !parsed.token) {
       throw new MedusaError(
         MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR,
@@ -337,7 +335,7 @@ abstract class ParsianProvider extends AbstractPaymentProvider<Options> {
     const soapBody = `<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
-    <ConfirmPayment xmlns="http://tempuri.org/">
+    <ConfirmPayment xmlns="https://pec.Shaparak.ir/NewIPGServices/Confirm/ConfirmService">
       <requestData>
         <LoginAccount>${escapeXml(this.options_.loginAccount)}</LoginAccount>
         <Token>${escapeXml(token)}</Token>

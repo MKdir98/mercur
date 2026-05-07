@@ -6,15 +6,17 @@ import {
   Heading,
   Input,
   Label,
+  Select,
   Text,
   toast,
 } from "@medusajs/ui";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   useHomepageMedia,
   useUpdateHomepageMedia,
   type HomepageMediaItem,
 } from "../../../hooks/api/homepage-media";
+import { useProductCategories } from "../../../hooks/api/product_category";
 import { clx } from "@medusajs/ui";
 
 const ACCEPT_IMAGE = "image/jpeg,image/png,image/gif,image/webp,image/svg+xml";
@@ -60,6 +62,75 @@ const uploadFile = async (file: File): Promise<string | undefined> => {
   }
   const data = await res.json();
   return data.files?.[0]?.url;
+};
+
+const NONE_CATEGORY = "__none__";
+
+const CategoryBannerSlotCard = ({
+  item,
+  categories,
+  onLinkChange,
+}: {
+  item: HomepageMediaItem;
+  categories: { id: string; name?: string | null; handle?: string | null }[];
+  onLinkChange: (key: string, link: string | null) => void;
+}) => {
+  const withHandle = useMemo(
+    () =>
+      categories.filter(
+        (c): c is { id: string; name?: string | null; handle: string } =>
+          Boolean(c.handle)
+      ),
+    [categories]
+  );
+  const handleSet = useMemo(
+    () => new Set(withHandle.map((c) => c.handle)),
+    [withHandle]
+  );
+  const selected = item.link?.trim();
+  const value =
+    selected && handleSet.has(selected) ? selected : NONE_CATEGORY;
+
+  return (
+    <div
+      className={clx(
+        "rounded-lg border border-ui-border-base p-4",
+        "bg-ui-bg-component"
+      )}
+    >
+      <Text weight="plus" className="mb-2 block">
+        {item.label}
+      </Text>
+      <Text size="small" className="text-ui-fg-subtle mb-3 block">
+        Storefront homepage: one horizontal row of products per selected category
+        (order follows slots 1–3). Leave all as None to use the first three root
+        categories automatically.
+      </Text>
+      <div>
+        <Label className="mb-1 block">Product category</Label>
+        <Select
+          value={value}
+          onValueChange={(v) =>
+            onLinkChange(item.key, v === NONE_CATEGORY ? null : v)
+          }
+        >
+          <Select.Trigger>
+            <Select.Value placeholder="None" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value={NONE_CATEGORY}>
+              None (automatic top categories)
+            </Select.Item>
+            {withHandle.map((c) => (
+              <Select.Item key={c.id} value={c.handle}>
+                {c.name ?? c.handle}
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select>
+      </div>
+    </div>
+  );
 };
 
 const MediaCard = ({
@@ -268,6 +339,8 @@ const MediaCard = ({
 
 const HomepageMediaPage = () => {
   const { homepage_media, isLoading, refetch } = useHomepageMedia();
+  const { product_categories, isLoading: categoriesLoading } =
+    useProductCategories({ limit: 500 });
   const { mutateAsync: updateMedia, isPending: isSaving } =
     useUpdateHomepageMedia({});
 
@@ -279,6 +352,15 @@ const HomepageMediaPage = () => {
     ...item,
     ...localItems[item.key],
   }));
+
+  const categoryBannerItems = useMemo(
+    () => items.filter((i) => i.type === "category"),
+    [items]
+  );
+  const mediaOnlyItems = useMemo(
+    () => items.filter((i) => i.type !== "category"),
+    [items]
+  );
 
   const handleImageChange = (key: string, url: string | null) => {
     setLocalItems((prev) => ({
@@ -334,7 +416,8 @@ const HomepageMediaPage = () => {
         <div>
           <Heading>Homepage Media</Heading>
           <Text className="text-ui-fg-subtle" size="small">
-            Manage images and videos displayed on the storefront homepage
+            Manage homepage media and which product categories power the
+            storefront category banner
           </Text>
         </div>
         <Button
@@ -348,17 +431,50 @@ const HomepageMediaPage = () => {
       {isLoading ? (
         <Text>Loading...</Text>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
-          {items.map((item) => (
-            <MediaCard
-              key={item.key}
-              item={item}
-              onImageChange={handleImageChange}
-              onVideoChange={handleVideoChange}
-              onLinkChange={handleLinkChange}
-              onAltChange={handleAltChange}
-            />
-          ))}
+        <div className="flex flex-col gap-8 p-6">
+          {categoryBannerItems.length > 0 && (
+            <div>
+              <Heading level="h2" className="mb-1 text-base">
+                Homepage category banner
+              </Heading>
+              <Text size="small" className="text-ui-fg-subtle mb-4 block">
+                Pick up to three categories (by handle). Saved with the same
+                button as media below.
+              </Text>
+              {categoriesLoading ? (
+                <Text size="small">Loading categories…</Text>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {categoryBannerItems.map((item) => (
+                    <CategoryBannerSlotCard
+                      key={item.key}
+                      item={item}
+                      categories={product_categories || []}
+                      onLinkChange={handleLinkChange}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <Heading level="h2" className="mb-4 text-base">
+              Images and videos
+            </Heading>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {mediaOnlyItems.map((item) => (
+                <MediaCard
+                  key={item.key}
+                  item={item}
+                  onImageChange={handleImageChange}
+                  onVideoChange={handleVideoChange}
+                  onLinkChange={handleLinkChange}
+                  onAltChange={handleAltChange}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </Container>

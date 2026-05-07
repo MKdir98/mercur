@@ -12,14 +12,15 @@ export function parseIranPaymentGatewayKeysFromEnv(): string[] {
 
 export function paymentProviderIdToIranGatewayKey(id: string): string | null {
   const x = id.toLowerCase()
-  if (x.includes('zarinpal-gateway')) {
+  console.log(x)
+  if (x.includes('pp_zarinpal-gateway_zarinpal')) {
     return 'zarinpal'
   }
-  if (x.includes('sep-gateway')) {
-    return 'sep'
-  }
-  if (x.includes('parsian-gateway')) {
+  if (x.includes('pp_parsian-gateway_parsian')) {
     return 'parsian'
+  }
+  if (x.includes('pp_sep-gateway_sep')) {
+    return 'sep'
   }
   return null
 }

@@ -1,5 +1,10 @@
 # Build context: repository root (mercur/), e.g. docker build -f apps/backend/Dockerfile .
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+
 FROM node:20-alpine AS base
+ENV http_proxy=$HTTP_PROXY
+ENV https_proxy=$HTTPS_PROXY
 RUN apk add --no-cache libc6-compat
 
 FROM base AS builder
