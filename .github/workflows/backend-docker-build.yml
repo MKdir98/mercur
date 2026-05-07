@@ -17,6 +17,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      # Login to GHCR
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -24,10 +25,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push
+      # Login to local registry (اگر auth داری)
+      - name: Login to Local Registry
+        uses: docker/login-action@v3
+        with:
+          registry: 185.8.174.197:5000
+
+      - name: Build and Push to both registries
         uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./apps/backend/Dockerfile
           push: true
-          tags: ghcr.io/mkdir98/mercur-backend:latest
+          tags: |
+            ghcr.io/mkdir98/mercur-backend:latest
+            185.8.174.197:5000/mercur-backend:latest
