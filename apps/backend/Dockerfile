@@ -17,6 +17,7 @@ COPY --from=builder /app/out/full/ .
 ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN yarn turbo build --filter=api
 
+# Runtime config only: pass secrets and DATABASE_URL via env / env_file (docker-compose), not build args.
 FROM base AS runner
 WORKDIR /app
 RUN addgroup --system --gid 1001 medusa && adduser --system --uid 1001 medusa
