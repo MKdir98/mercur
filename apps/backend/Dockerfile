@@ -14,6 +14,9 @@ COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/yarn.lock ./yarn.lock
 RUN yarn install --frozen-lockfile || yarn install
 COPY --from=builder /app/out/full/ .
+# turbo prune فقط درخت وابسته را می‌آورد؛ `_tsconfig.base.json` ریشه را نه — برای
+# packages/modules/*/tsconfig.json که به ../../../_tsconfig.base.json ارجاع می‌دهند لازم است.
+COPY --from=builder /app/_tsconfig.base.json ./_tsconfig.base.json
 ENV NODE_OPTIONS=--max-old-space-size=4096
 # medusa-config.ts هنگام `medusa build` اجرا می‌شود. مقادیر زیر فقط برای همین دستور در shell
 # ست می‌شوند (در لایهٔ ایمیج به‌صورت ENV باقی نمی‌مانند — برای Dockle/Hadolint و امنیت).
