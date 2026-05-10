@@ -15,14 +15,15 @@ COPY --from=builder /app/out/yarn.lock ./yarn.lock
 RUN yarn install --frozen-lockfile || yarn install
 COPY --from=builder /app/out/full/ .
 ENV NODE_OPTIONS=--max-old-space-size=4096
-# medusa-config.ts هنگام `medusa build` اجرا می‌شود؛ بدون این مقادیر بیلد می‌ترکد.
-# مقدار واقعی دیتابیس و CORS در زمان اجرا از `.env` کنار docker-compose می‌آید.
-ENV DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/medusa_build_placeholder" \
+# medusa-config.ts هنگام `medusa build` اجرا می‌شود. مقادیر زیر فقط برای همین دستور در shell
+# ست می‌شوند (در لایهٔ ایمیج به‌صورت ENV باقی نمی‌مانند — برای Dockle/Hadolint و امنیت).
+# کانفیگ واقعی فقط در زمان اجرا از compose `.env` می‌آید.
+RUN DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/medusa_build_placeholder" \
     STORE_CORS="http://localhost:3000" \
     ADMIN_CORS="http://localhost:9000" \
     VENDOR_CORS="http://localhost:5173" \
-    AUTH_CORS="http://localhost:3000,http://localhost:9000,http://localhost:5173"
-RUN yarn turbo build --filter=api
+    AUTH_CORS="http://localhost:3000,http://localhost:9000,http://localhost:5173" \
+    yarn turbo build --filter=api
 
 # Runtime config only: pass secrets and DATABASE_URL via env / env_file (docker-compose), not build args.
 FROM base AS runner
