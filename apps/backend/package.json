@@ -66,6 +66,7 @@
     "@mercurjs/stripe-tax-provider": "*",
     "@mercurjs/support-ticket": "*",
     "@mercurjs/taxcode": "*",
+    "@mercurjs/translations": "*",
     "@mercurjs/wallet": "*",
     "@mercurjs/wishlist": "*",
     "@mercurjs/zarinpal": "*",
