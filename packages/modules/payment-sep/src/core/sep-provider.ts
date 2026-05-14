@@ -31,6 +31,7 @@ import {
   UpdatePaymentOutput,
 } from '@medusajs/types'
 import { resolveSepIpgEndpoints } from '@mercurjs/framework'
+import { logExternalServiceCall } from '@mercurjs/framework'
 
 type Options = {
   terminalId: string
@@ -96,9 +97,11 @@ abstract class SepProvider extends AbstractPaymentProvider<Options> {
   private readonly tokenUrl: string
   private readonly paymentGatewayPostUrl: string
   private readonly verifyUrl: string
+  protected container_: any
 
   constructor(container: unknown, options: Options) {
     super(container as Record<string, unknown>)
+    this.container_ = container
 
     this.options_ = options
 
@@ -170,14 +173,27 @@ abstract class SepProvider extends AbstractPaymentProvider<Options> {
       requestBody.CellNumber = cellNumber
     }
 
+    const start = Date.now()
+
     const response = await axios.post<RequestTokenResponse>(this.tokenUrl, requestBody, {
       headers: { 'Content-Type': 'application/json' },
     })
 
     if (response.data.status !== 1 || !response.data.token) {
+      const errMsg = `SEP request failed: ${response.data.errorDesc || 'Unknown'} (${response.data.errorCode})`
+      await logExternalServiceCall(this.container_, {
+        service_name: 'sep',
+        action: 'initiatePayment',
+        endpoint: this.tokenUrl,
+        status: 'error',
+        request_data: { ...requestBody, TerminalId: '***' },
+        response_data: response.data as unknown as Record<string, unknown>,
+        duration_ms: Date.now() - start,
+        error_message: errMsg,
+      })
       throw new MedusaError(
         MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR,
-        `SEP request failed: ${response.data.errorDesc || 'Unknown'} (${response.data.errorCode})`
+        errMsg
       )
     }
 
@@ -208,10 +224,17 @@ abstract class SepProvider extends AbstractPaymentProvider<Options> {
       cart_id: cartId || undefined,
     }
 
-    return {
-      id: resNum,
-      data: paymentData,
-    }
+    await logExternalServiceCall(this.container_, {
+      service_name: 'sep',
+      action: 'initiatePayment',
+      endpoint: this.tokenUrl,
+      status: 'success',
+      request_data: { ...requestBody, TerminalId: '***' },
+      response_data: { status: response.data.status, has_token: !!token },
+      duration_ms: Date.now() - start,
+    })
+
+    return { id: resNum, data: paymentData }
   }
 
   async authorizePayment(
@@ -231,10 +254,31 @@ abstract class SepProvider extends AbstractPaymentProvider<Options> {
       return { status: PaymentSessionStatus.ERROR, data: paymentData }
     }
 
+    const start = Date.now()
     const verified = await this.verifySepRef(refNum, paymentData)
+
     if (!verified.ok) {
+      await logExternalServiceCall(this.container_, {
+        service_name: 'sep',
+        action: 'authorizePayment',
+        endpoint: this.verifyUrl,
+        status: 'error',
+        request_data: { ref_num: refNum },
+        duration_ms: Date.now() - start,
+        error_message: verified.message,
+      })
       return { status: PaymentSessionStatus.ERROR, data: { ...paymentData, ...verified } }
     }
+
+    await logExternalServiceCall(this.container_, {
+      service_name: 'sep',
+      action: 'authorizePayment',
+      endpoint: this.verifyUrl,
+      status: 'success',
+      request_data: { ref_num: refNum },
+      response_data: verified.detail ?? null,
+      duration_ms: Date.now() - start,
+    })
 
     return {
       status: PaymentSessionStatus.AUTHORIZED,
@@ -265,10 +309,31 @@ abstract class SepProvider extends AbstractPaymentProvider<Options> {
       throw this.buildError('RefNum is required for payment capture', new Error('Missing ref_num'))
     }
 
+    const start = Date.now()
     const verified = await this.verifySepRef(refNum, paymentSessionData as Record<string, unknown>)
+
     if (!verified.ok) {
+      await logExternalServiceCall(this.container_, {
+        service_name: 'sep',
+        action: 'capturePayment',
+        endpoint: this.verifyUrl,
+        status: 'error',
+        request_data: { ref_num: refNum },
+        duration_ms: Date.now() - start,
+        error_message: verified.message || 'SEP verification failed',
+      })
       throw new Error(verified.message || 'SEP verification failed')
     }
+
+    await logExternalServiceCall(this.container_, {
+      service_name: 'sep',
+      action: 'capturePayment',
+      endpoint: this.verifyUrl,
+      status: 'success',
+      request_data: { ref_num: refNum },
+      response_data: verified.detail ?? null,
+      duration_ms: Date.now() - start,
+    })
 
     return {
       data: {

@@ -17,6 +17,15 @@ const VENDOR_ORDER_RETRIEVE_FIELDS = [
   'currency_code',
   'total',
   'subtotal',
+  'item_total',
+  'item_subtotal',
+  'shipping_total',
+  'shipping_subtotal',
+  'shipping_tax_total',
+  'discount_total',
+  'discount_subtotal',
+  'tax_total',
+  'refundable_total',
   'metadata',
   'created_at',
   'updated_at',
@@ -29,6 +38,7 @@ const VENDOR_ORDER_RETRIEVE_FIELDS = [
   'items.title',
   'items.variant_sku',
   'items.unit_price',
+  'items.original_unit_price',
   'items.subtotal',
   'items.thumbnail',
   'items.detail',
@@ -40,6 +50,13 @@ const VENDOR_ORDER_RETRIEVE_FIELDS = [
   'items.variant.options',
   'items.variant.product',
   'items.variant.product.shipping_profile.id',
+  'items.variant.inventory.id',
+  'items.variant.inventory.sku',
+  'items.variant.inventory.location_levels.id',
+  'items.variant.inventory.location_levels.location_id',
+  'items.variant.inventory.location_levels.available_quantity',
+  'items.variant.inventory.location_levels.stocked_quantity',
+  'items.variant.inventory.location_levels.reserved_quantity',
   'items.created_at',
   'fulfillments.id',
   'fulfillments.items',
@@ -52,6 +69,9 @@ const VENDOR_ORDER_RETRIEVE_FIELDS = [
   'fulfillments.canceled_at',
   'fulfillments.created_at',
   'fulfillments.labels',
+  'fulfillments.labels.tracking_number',
+  'fulfillments.labels.tracking_url',
+  'fulfillments.labels.label_url',
   'shipping_methods.shipping_option_id'
 ]
 
@@ -127,6 +147,38 @@ export const GET = async (
     } catch {
     }
   }
+  // Populate labels from postex_shipment table for fulfillments that have no labels
+  if (Array.isArray(orderData.fulfillments)) {
+    const fulfillmentsWithoutLabels = (orderData.fulfillments as Array<Record<string, unknown>>)
+      .filter((f) => !Array.isArray(f.labels) || (f.labels as unknown[]).length === 0)
+    if (fulfillmentsWithoutLabels.length > 0) {
+      try {
+        const knex = req.scope.resolve(ContainerRegistrationKeys.PG_CONNECTION) as any
+        const fulfillmentIds = fulfillmentsWithoutLabels.map((f) => f.id as string)
+        const rows = await knex('postex_shipment')
+          .whereIn('fulfillment_id', fulfillmentIds)
+          .whereNotNull('postex_tracking_code')
+          .select('fulfillment_id', 'postex_tracking_code')
+        const trackingByFulfillment = new Map<string, string>()
+        for (const row of rows) {
+          trackingByFulfillment.set(row.fulfillment_id, row.postex_tracking_code)
+        }
+        ;(orderData.fulfillments as Array<Record<string, unknown>>).forEach((f) => {
+          const trackingCode = trackingByFulfillment.get(f.id as string)
+          if (trackingCode) {
+            f.labels = [{
+              tracking_number: trackingCode,
+              tracking_url: `https://tracking.postex.ir/${trackingCode}`,
+              label_url: `/vendor/orders/${id}/fulfillments/${f.id}/postex-label`,
+            }]
+          }
+        })
+      } catch {
+        // non-fatal: labels stay empty
+      }
+    }
+  }
+
   const rawItems = (orderData.items ?? []) as Array<Record<string, unknown>>
   orderData.items = rawItems.map((item) => {
     const detail = item.detail as Record<string, unknown> | undefined
@@ -145,7 +197,12 @@ export const GET = async (
 
   const splitPayment = splitPaymentRows?.[0]?.split_order_payment
   if (splitPayment) {
-    orderData.split_order_payment = splitPayment
+    orderData.split_order_payment = {
+      ...splitPayment,
+      authorized_amount: parseFloat(String(splitPayment.authorized_amount)) || 0,
+      captured_amount: parseFloat(String(splitPayment.captured_amount)) || 0,
+      refunded_amount: parseFloat(String(splitPayment.refunded_amount)) || 0,
+    }
     orderData.payment_status = splitPayment.status
   }
 

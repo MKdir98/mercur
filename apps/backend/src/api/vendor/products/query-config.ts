@@ -32,6 +32,8 @@ export const vendorProductFields = [
   'variants.prices.price_rules.value',
   'variants.prices.price_rules.attribute',
   '*variants.options',
+  '*variants.inventory',
+  '*variants.inventory.location_levels',
   '*attribute_values',
   '*attribute_values.attribute'
 ]

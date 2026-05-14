@@ -30,6 +30,7 @@ import {
   UpdatePaymentInput,
   UpdatePaymentOutput,
 } from '@medusajs/types'
+import { logExternalServiceCall } from '@mercurjs/framework'
 
 type Options = {
   merchantId: string
@@ -66,10 +67,11 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
   protected readonly options_: Options
   protected readonly baseUrl: string
   protected readonly paymentGatewayUrl: string
+  protected container_: any
 
   constructor(container: any, options: Options) {
     super(container)
-
+    this.container_ = container
     this.options_ = options
 
     if (options.sandbox) {
@@ -85,23 +87,23 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
     input: GetPaymentStatusInput
   ): Promise<GetPaymentStatusOutput> {
     const data = input.data as Record<string, unknown>
-    
+
     if (data.status === 'verified') {
       return { status: PaymentSessionStatus.CAPTURED, data }
     }
-    
+
     if (data.status === 'pending') {
       return { status: PaymentSessionStatus.PENDING, data }
     }
-    
+
     if (data.status === 'authorized') {
       return { status: PaymentSessionStatus.AUTHORIZED, data }
     }
-    
+
     if (data.status === 'failed') {
       return { status: PaymentSessionStatus.ERROR, data }
     }
-    
+
     return { status: PaymentSessionStatus.PENDING, data }
   }
 
@@ -125,27 +127,24 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
     const cart = (ctx?.cart ?? data?.cart ?? (ctx && 'items' in ctx ? ctx : undefined)) as Record<string, unknown> | undefined
     const numericAmount = computeGatewayAmount(fallbackAmount, cart)
 
-    try {
-      const requestBody = {
-        merchant_id: this.options_.merchantId,
-        amount: Math.round(numericAmount),
-        description: (providerData?.description as string) || 'پرداخت سفارش',
-        callback_url: callbackUrl,
-        metadata: {
-          cart_id: providerData?.cart_id,
-          customer_id: context?.customer?.id,
-          email: context?.customer?.email,
-        },
-      }
+    const endpoint = `${this.baseUrl}/request.json`
+    const requestBody = {
+      amount: Math.round(numericAmount),
+      description: (providerData?.description as string) || 'پرداخت سفارش',
+      callback_url: callbackUrl,
+      metadata: {
+        cart_id: providerData?.cart_id,
+        customer_id: (context as any)?.customer?.id,
+        email: (context as any)?.customer?.email,
+      },
+    }
+    const start = Date.now()
 
+    try {
       const response = await axios.post<any>(
-        `${this.baseUrl}/request.json`,
-        requestBody,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
+        endpoint,
+        { ...requestBody, merchant_id: this.options_.merchantId },
+        { headers: { 'Content-Type': 'application/json' } }
       )
 
       const zarinpalData = response.data.data || response.data
@@ -154,7 +153,18 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
 
       if (code !== 100 || !authority) {
         console.error('❌ [Zarinpal] Request failed:', response.data)
-        throw new Error(`Zarinpal request failed: ${zarinpalData.message || JSON.stringify(response.data)}`)
+        const err = new Error(`Zarinpal request failed: ${zarinpalData.message || JSON.stringify(response.data)}`)
+        await logExternalServiceCall(this.container_, {
+          service_name: 'zarinpal',
+          action: 'initiatePayment',
+          endpoint,
+          status: 'error',
+          request_data: requestBody,
+          response_data: response.data,
+          duration_ms: Date.now() - start,
+          error_message: err.message,
+        })
+        throw err
       }
 
       const paymentData = {
@@ -166,20 +176,36 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
         payment_url: `${this.paymentGatewayUrl}/${authority}`,
       }
 
-      return {
-        id: authority,
-        data: paymentData,
-      }
-    } catch (error: any) {
-      console.error('❌ [Zarinpal] Exception in initiatePayment:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
+      await logExternalServiceCall(this.container_, {
+        service_name: 'zarinpal',
+        action: 'initiatePayment',
+        endpoint,
+        status: 'success',
+        request_data: requestBody,
+        response_data: { code, authority },
+        duration_ms: Date.now() - start,
       })
-      throw this.buildError(
-        'An error occurred in initiatePayment',
-        error
-      )
+
+      return { id: authority, data: paymentData }
+    } catch (error: any) {
+      if (!(error instanceof MedusaError)) {
+        await logExternalServiceCall(this.container_, {
+          service_name: 'zarinpal',
+          action: 'initiatePayment',
+          endpoint,
+          status: 'error',
+          request_data: requestBody,
+          response_data: error.response?.data ?? null,
+          duration_ms: Date.now() - start,
+          error_message: error.message,
+        })
+        console.error('❌ [Zarinpal] Exception in initiatePayment:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status
+        })
+      }
+      throw this.buildError('An error occurred in initiatePayment', error)
     }
   }
 
@@ -187,11 +213,11 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
     data: AuthorizePaymentInput
   ): Promise<AuthorizePaymentOutput> {
     const paymentData = data.data as Record<string, unknown>
-    
+
     if (paymentData.status === 'authorized' || paymentData.status === 'verified') {
-      return { 
-        status: PaymentSessionStatus.AUTHORIZED, 
-        data: { ...paymentData, status: 'authorized' } 
+      return {
+        status: PaymentSessionStatus.AUTHORIZED,
+        data: { ...paymentData, status: 'authorized' }
       }
     }
 
@@ -201,26 +227,31 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
       return { status: PaymentSessionStatus.ERROR, data: paymentData }
     }
 
+    const endpoint = `${this.baseUrl}/verify.json`
+    const amountValue = Number(paymentData.amount) || 0
+    const requestBody = { authority, amount: Math.round(amountValue) }
+    const start = Date.now()
+
     try {
-      const amountValue = Number(paymentData.amount) || 0
       const response = await axios.post<any>(
-        `${this.baseUrl}/verify.json`,
-        {
-          merchant_id: this.options_.merchantId,
-          authority,
-          amount: Math.round(amountValue),
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
+        endpoint,
+        { ...requestBody, merchant_id: this.options_.merchantId },
+        { headers: { 'Content-Type': 'application/json' } }
       )
 
       const zarinpalData = response.data.data || response.data
       const code = zarinpalData.code
 
       if (code === 100 || code === 101) {
+        await logExternalServiceCall(this.container_, {
+          service_name: 'zarinpal',
+          action: 'authorizePayment',
+          endpoint,
+          status: 'success',
+          request_data: requestBody,
+          response_data: { code, ref_id: zarinpalData.ref_id, card_pan: zarinpalData.card_pan },
+          duration_ms: Date.now() - start,
+        })
         return {
           status: PaymentSessionStatus.AUTHORIZED,
           data: {
@@ -233,13 +264,33 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
         }
       } else {
         console.error('❌ [Zarinpal] Verification failed:', zarinpalData)
-        return { 
-          status: PaymentSessionStatus.ERROR, 
-          data: { ...paymentData, error: zarinpalData.message } 
+        await logExternalServiceCall(this.container_, {
+          service_name: 'zarinpal',
+          action: 'authorizePayment',
+          endpoint,
+          status: 'error',
+          request_data: requestBody,
+          response_data: zarinpalData,
+          duration_ms: Date.now() - start,
+          error_message: zarinpalData.message || `Verification failed with code ${code}`,
+        })
+        return {
+          status: PaymentSessionStatus.ERROR,
+          data: { ...paymentData, error: zarinpalData.message }
         }
       }
     } catch (error: any) {
       console.error('❌ [Zarinpal] Exception in authorizePayment:', error.message)
+      await logExternalServiceCall(this.container_, {
+        service_name: 'zarinpal',
+        action: 'authorizePayment',
+        endpoint,
+        status: 'error',
+        request_data: requestBody,
+        response_data: error.response?.data ?? null,
+        duration_ms: Date.now() - start,
+        error_message: error.message,
+      })
       return { status: PaymentSessionStatus.ERROR, data: paymentData }
     }
   }
@@ -247,11 +298,11 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
   async cancelPayment({
     data: paymentSessionData,
   }: CancelPaymentInput): Promise<CancelPaymentOutput> {
-    return { 
-      data: { 
-        ...paymentSessionData, 
-        status: 'cancelled' 
-      } 
+    return {
+      data: {
+        ...paymentSessionData,
+        status: 'cancelled'
+      }
     }
   }
 
@@ -267,26 +318,31 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
       )
     }
 
+    const endpoint = `${this.baseUrl}/verify.json`
+    const amountValue = Number(paymentSessionData?.amount) || 0
+    const requestBody = { authority, amount: Math.round(amountValue) }
+    const start = Date.now()
+
     try {
-      const amountValue = Number(paymentSessionData?.amount) || 0
       const response = await axios.post<any>(
-        `${this.baseUrl}/verify.json`,
-        {
-          merchant_id: this.options_.merchantId,
-          authority,
-          amount: Math.round(amountValue),
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
+        endpoint,
+        { ...requestBody, merchant_id: this.options_.merchantId },
+        { headers: { 'Content-Type': 'application/json' } }
       )
 
       const zarinpalData = response.data.data || response.data
       const code = zarinpalData.code
 
       if (code === 100 || code === 101) {
+        await logExternalServiceCall(this.container_, {
+          service_name: 'zarinpal',
+          action: 'capturePayment',
+          endpoint,
+          status: 'success',
+          request_data: requestBody,
+          response_data: { code, ref_id: zarinpalData.ref_id, card_pan: zarinpalData.card_pan },
+          duration_ms: Date.now() - start,
+        })
         return {
           data: {
             ...paymentSessionData,
@@ -297,9 +353,32 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
           },
         }
       } else {
-        throw new Error(`Verification failed: ${zarinpalData.message}`)
+        const errMsg = `Verification failed: ${zarinpalData.message}`
+        await logExternalServiceCall(this.container_, {
+          service_name: 'zarinpal',
+          action: 'capturePayment',
+          endpoint,
+          status: 'error',
+          request_data: requestBody,
+          response_data: zarinpalData,
+          duration_ms: Date.now() - start,
+          error_message: errMsg,
+        })
+        throw new Error(errMsg)
       }
     } catch (error: any) {
+      if (!(error instanceof MedusaError) && !error.message?.startsWith('Verification failed')) {
+        await logExternalServiceCall(this.container_, {
+          service_name: 'zarinpal',
+          action: 'capturePayment',
+          endpoint,
+          status: 'error',
+          request_data: requestBody,
+          response_data: error.response?.data ?? null,
+          duration_ms: Date.now() - start,
+          error_message: error.message,
+        })
+      }
       throw this.buildError('An error occurred in capturePayment', error)
     }
   }
@@ -328,11 +407,11 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
       return { data }
     }
 
-    return { 
-      data: { 
-        ...data, 
-        amount 
-      } 
+    return {
+      data: {
+        ...data,
+        amount
+      }
     }
   }
 

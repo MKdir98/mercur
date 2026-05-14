@@ -57,6 +57,7 @@ module.exports = defineConfig({
     }),
   },
   modules: [
+    { resolve: '@mercurjs/service-log' },
     { resolve: '@mercurjs/seller' },
     { resolve: '@mercurjs/reviews' },
     { resolve: '@mercurjs/marketplace' },

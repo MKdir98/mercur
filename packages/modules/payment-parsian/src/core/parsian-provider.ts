@@ -32,6 +32,7 @@ import {
 } from '@medusajs/types'
 
 import { getParsianGatewayUrls, type ParsianGatewayUrls } from '../parsian-urls'
+import { logExternalServiceCall } from '@mercurjs/framework'
 
 type Options = {
   loginAccount: string
@@ -120,9 +121,11 @@ function parseConfirmResult(xml: string): { status: number; rrn: string | null; 
 abstract class ParsianProvider extends AbstractPaymentProvider<Options> {
   protected readonly options_: Options
   private readonly urls: ParsianGatewayUrls
+  protected container_: any
 
   constructor(container: unknown, options: Options) {
     super(container as Record<string, unknown>)
+    this.container_ = container
     this.options_ = options
     this.urls = getParsianGatewayUrls(options.sandbox)
   }
@@ -192,6 +195,7 @@ abstract class ParsianProvider extends AbstractPaymentProvider<Options> {
   </soap:Body>
 </soap:Envelope>`
 
+    const start = Date.now()
     const response = await axios.post(this.urls.saleSoapUrl, soapBody, {
       headers: {
         'Content-Type': 'text/xml; charset=utf-8',
@@ -200,10 +204,22 @@ abstract class ParsianProvider extends AbstractPaymentProvider<Options> {
       validateStatus: () => true,
     })
     const parsed = parseSaleResult(typeof response.data === 'string' ? response.data : String(response.data))
+
     if (parsed.status !== 0 || !parsed.token) {
+      const errMsg = `Parsian sale failed: ${parsed.message || parsed.status}`
+      await logExternalServiceCall(this.container_, {
+        service_name: 'parsian',
+        action: 'initiatePayment',
+        endpoint: this.urls.saleSoapUrl,
+        status: 'error',
+        request_data: { order_id: orderId, amount: numericAmount, cart_id: cartId },
+        response_data: { status: parsed.status, message: parsed.message },
+        duration_ms: Date.now() - start,
+        error_message: errMsg,
+      })
       throw new MedusaError(
         MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR,
-        `Parsian sale failed: ${parsed.message || parsed.status}`
+        errMsg
       )
     }
 
@@ -219,10 +235,17 @@ abstract class ParsianProvider extends AbstractPaymentProvider<Options> {
       cart_id: cartId || undefined,
     }
 
-    return {
-      id: String(orderId),
-      data: paymentData,
-    }
+    await logExternalServiceCall(this.container_, {
+      service_name: 'parsian',
+      action: 'initiatePayment',
+      endpoint: this.urls.saleSoapUrl,
+      status: 'success',
+      request_data: { order_id: orderId, amount: numericAmount, cart_id: cartId },
+      response_data: { status: parsed.status, has_token: !!parsed.token },
+      duration_ms: Date.now() - start,
+    })
+
+    return { id: String(orderId), data: paymentData }
   }
 
   async authorizePayment(
@@ -242,13 +265,34 @@ abstract class ParsianProvider extends AbstractPaymentProvider<Options> {
       return { status: PaymentSessionStatus.ERROR, data: paymentData }
     }
 
+    const start = Date.now()
     const confirmed = await this.confirmParsianToken(token)
+
     if (!confirmed.ok) {
+      await logExternalServiceCall(this.container_, {
+        service_name: 'parsian',
+        action: 'authorizePayment',
+        endpoint: this.urls.confirmSoapUrl,
+        status: 'error',
+        request_data: { has_token: !!token },
+        duration_ms: Date.now() - start,
+        error_message: confirmed.message,
+      })
       return {
         status: PaymentSessionStatus.ERROR,
         data: { ...paymentData, error: confirmed.message },
       }
     }
+
+    await logExternalServiceCall(this.container_, {
+      service_name: 'parsian',
+      action: 'authorizePayment',
+      endpoint: this.urls.confirmSoapUrl,
+      status: 'success',
+      request_data: { has_token: !!token },
+      response_data: { rrn: confirmed.rrn },
+      duration_ms: Date.now() - start,
+    })
 
     return {
       status: PaymentSessionStatus.AUTHORIZED,
@@ -278,10 +322,31 @@ abstract class ParsianProvider extends AbstractPaymentProvider<Options> {
       throw this.buildError('Parsian token is required for capture', new Error('Missing token'))
     }
 
+    const start = Date.now()
     const confirmed = await this.confirmParsianToken(token)
+
     if (!confirmed.ok) {
+      await logExternalServiceCall(this.container_, {
+        service_name: 'parsian',
+        action: 'capturePayment',
+        endpoint: this.urls.confirmSoapUrl,
+        status: 'error',
+        request_data: { has_token: !!token },
+        duration_ms: Date.now() - start,
+        error_message: confirmed.message || 'Parsian confirm failed',
+      })
       throw new Error(confirmed.message || 'Parsian confirm failed')
     }
+
+    await logExternalServiceCall(this.container_, {
+      service_name: 'parsian',
+      action: 'capturePayment',
+      endpoint: this.urls.confirmSoapUrl,
+      status: 'success',
+      request_data: { has_token: !!token },
+      response_data: { rrn: confirmed.rrn },
+      duration_ms: Date.now() - start,
+    })
 
     return {
       data: {

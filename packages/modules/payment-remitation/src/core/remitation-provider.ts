@@ -3,6 +3,7 @@ import {
   ProviderWebhookPayload,
   WebhookActionResult,
 } from "@medusajs/framework/types"
+import { logExternalServiceCall } from "@mercurjs/framework"
 import {
   AbstractPaymentProvider,
   MedusaError,
@@ -237,9 +238,11 @@ export function remitationGatewayResponseIsPaid(apiData: unknown): boolean {
 
 abstract class RemitationProvider extends AbstractPaymentProvider<RemitationOptions> {
   protected readonly options_: RemitationOptions
+  protected container_: any
 
   constructor(container: any, options: RemitationOptions) {
     super(container)
+    this.container_ = container
     this.options_ = options
   }
 
@@ -367,19 +370,22 @@ abstract class RemitationProvider extends AbstractPaymentProvider<RemitationOpti
 
     const redirectUrl = `${backendBase}/payment/remitation/callback?cart_id=${encodeURIComponent(cartId)}`
 
+    const generateUrl = `${this.resolvedApiRoot()}/plugin/payment-gateway/generate`
+    const requestBody = {
+      amount: usdAmount,
+      currency: this.options_.currency,
+      productName: "Order payment",
+      desc: (providerData?.description as string) || "Order payment",
+      extData: { cart_id: cartId },
+      provider: this.options_.provider,
+      redirectUrl,
+    }
+    const start = Date.now()
+
     try {
-      const url = `${this.resolvedApiRoot()}/plugin/payment-gateway/generate`
       const res = await axios.post<Record<string, unknown>>(
-        url,
-        {
-          amount: usdAmount,
-          currency: this.options_.currency,
-          productName: "Order payment",
-          desc: (providerData?.description as string) || "Order payment",
-          extData: { cart_id: cartId },
-          provider: this.options_.provider,
-          redirectUrl,
-        },
+        generateUrl,
+        requestBody,
         {
           headers: this.headers(),
           validateStatus: () => true,
@@ -388,16 +394,34 @@ abstract class RemitationProvider extends AbstractPaymentProvider<RemitationOpti
       )
 
       if (res.status < 200 || res.status >= 300) {
-        throw new Error(
-          `Remitation generate failed ${res.status}: ${JSON.stringify(res.data)}`
-        )
+        const errMsg = `Remitation generate failed ${res.status}: ${JSON.stringify(res.data)}`
+        await logExternalServiceCall(this.container_, {
+          service_name: "remitation",
+          action: "initiatePayment",
+          endpoint: generateUrl,
+          status: "error",
+          request_data: { amount: usdAmount, currency: this.options_.currency, cart_id: cartId },
+          response_data: res.data as Record<string, unknown>,
+          duration_ms: Date.now() - start,
+          error_message: errMsg,
+        })
+        throw new Error(errMsg)
       }
 
       const extracted = extractRemitationPaymentLinkAndShortId(res.data)
       if (!extracted) {
-        throw new Error(
-          `Invalid Remitation response: ${JSON.stringify(res.data)}`
-        )
+        const errMsg = `Invalid Remitation response: ${JSON.stringify(res.data)}`
+        await logExternalServiceCall(this.container_, {
+          service_name: "remitation",
+          action: "initiatePayment",
+          endpoint: generateUrl,
+          status: "error",
+          request_data: { amount: usdAmount, currency: this.options_.currency, cart_id: cartId },
+          response_data: res.data as Record<string, unknown>,
+          duration_ms: Date.now() - start,
+          error_message: errMsg,
+        })
+        throw new Error(errMsg)
       }
       const { shortId, paymentUrl } = extracted
 
@@ -412,6 +436,16 @@ abstract class RemitationProvider extends AbstractPaymentProvider<RemitationOpti
         payment_url: paymentUrl,
         cart_id: cartId,
       }
+
+      await logExternalServiceCall(this.container_, {
+        service_name: "remitation",
+        action: "initiatePayment",
+        endpoint: generateUrl,
+        status: "success",
+        request_data: { amount: usdAmount, currency: this.options_.currency, cart_id: cartId },
+        response_data: { short_id: shortId, has_payment_url: !!paymentUrl },
+        duration_ms: Date.now() - start,
+      })
 
       return {
         id: shortId,
@@ -445,11 +479,23 @@ abstract class RemitationProvider extends AbstractPaymentProvider<RemitationOpti
       return { status: PaymentSessionStatus.ERROR, data: paymentData }
     }
 
+    const fetchUrl = `${this.resolvedApiRoot()}/plugin/payment-gateway/${encodeURIComponent(shortId)}`
+    const start = Date.now()
+
     try {
       const raw = await this.fetchGatewayRecord(shortId)
       if (!remitationGatewayResponseIsPaid(raw)) {
         return { status: PaymentSessionStatus.PENDING, data: paymentData }
       }
+      await logExternalServiceCall(this.container_, {
+        service_name: "remitation",
+        action: "authorizePayment",
+        endpoint: fetchUrl,
+        status: "success",
+        request_data: { short_id: shortId },
+        response_data: { is_paid: true },
+        duration_ms: Date.now() - start,
+      })
       return {
         status: PaymentSessionStatus.AUTHORIZED,
         data: {
@@ -460,6 +506,15 @@ abstract class RemitationProvider extends AbstractPaymentProvider<RemitationOpti
       }
     } catch (error: unknown) {
       console.error("Remitation authorizePayment error:", error)
+      await logExternalServiceCall(this.container_, {
+        service_name: "remitation",
+        action: "authorizePayment",
+        endpoint: fetchUrl,
+        status: "error",
+        request_data: { short_id: shortId },
+        duration_ms: Date.now() - start,
+        error_message: error instanceof Error ? error.message : String(error),
+      })
       return { status: PaymentSessionStatus.ERROR, data: paymentData }
     }
   }
@@ -488,10 +543,33 @@ abstract class RemitationProvider extends AbstractPaymentProvider<RemitationOpti
       )
     }
 
+    const fetchUrl = `${this.resolvedApiRoot()}/plugin/payment-gateway/${encodeURIComponent(shortId)}`
+    const start = Date.now()
+
     const raw = await this.fetchGatewayRecord(shortId)
     if (!remitationGatewayResponseIsPaid(raw)) {
+      await logExternalServiceCall(this.container_, {
+        service_name: "remitation",
+        action: "capturePayment",
+        endpoint: fetchUrl,
+        status: "error",
+        request_data: { short_id: shortId },
+        response_data: { is_paid: false },
+        duration_ms: Date.now() - start,
+        error_message: "Remitation payment is not completed yet",
+      })
       throw new Error("Remitation payment is not completed yet")
     }
+
+    await logExternalServiceCall(this.container_, {
+      service_name: "remitation",
+      action: "capturePayment",
+      endpoint: fetchUrl,
+      status: "success",
+      request_data: { short_id: shortId },
+      response_data: { is_paid: true },
+      duration_ms: Date.now() - start,
+    })
 
     return {
       data: {

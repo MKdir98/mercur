@@ -1,5 +1,6 @@
 import { AbstractFulfillmentProviderService, Modules, ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { PostexClient } from "../../integrations/postex/client"
+import { logExternalServiceCall } from "@mercurjs/framework"
 
 function getPostexFlatShippingAmountRial(): number | null {
   const raw = process.env.POSTEX_FLAT_SHIPPING_AMOUNT_RIAL
@@ -203,19 +204,24 @@ class PostexService extends AbstractFulfillmentProviderService {
 
       // 6. Call Postex API
       const postexClient = new PostexClient(this.options_)
-      const collectionType = optionData.type === 'postex-pickup' ? 'pick_up' : 'pick_up'
-      
-      const result = await postexClient.calculateRates({
-        from_city_code: originCityCode,
-        to_city_code: destinationCityCode,
-        parcels,
-        collection_type: collectionType
-      })
+      const collectionType = optionData.type === 'postex-pickup' ? 'pick_up' : 'courier_drop_off'
+      const ratesPayload = { from_city_code: originCityCode, to_city_code: destinationCityCode, parcels, collection_type: collectionType }
+      const ratesStart = Date.now()
+
+      const result = await postexClient.calculateRates(ratesPayload)
 
       // 7. Return calculated price
       if (result && result.price) {
         const roundedPrice = Math.ceil(result.price / 5000) * 5000
-        
+        await logExternalServiceCall(this.getDbContainer(), {
+          service_name: 'postex',
+          action: 'calculateRates',
+          endpoint: '/api/v1/shipping/quotes',
+          status: 'success',
+          request_data: { from_city_code: originCityCode, to_city_code: destinationCityCode, parcels_count: parcels.length, collection_type: collectionType },
+          response_data: { price: result.price, rounded_price: roundedPrice },
+          duration_ms: Date.now() - ratesStart,
+        })
         console.log('✅ [POSTEX SUCCESS] Shipping price calculated:', {
           price: result.price,
           roundedPrice: roundedPrice,
@@ -230,6 +236,15 @@ class PostexService extends AbstractFulfillmentProviderService {
         }
       }
 
+      await logExternalServiceCall(this.getDbContainer(), {
+        service_name: 'postex',
+        action: 'calculateRates',
+        endpoint: '/api/v1/shipping/quotes',
+        status: 'error',
+        request_data: { from_city_code: originCityCode, to_city_code: destinationCityCode, parcels_count: parcels.length },
+        duration_ms: Date.now() - ratesStart,
+        error_message: 'No price returned from Postex',
+      })
       throw new Error('خطا در استعلام هزینه ارسال: پستکس قیمتی برنگرداند')
 
     } catch (error) {
@@ -596,11 +611,31 @@ class PostexService extends AbstractFulfillmentProviderService {
         receiver: requestData.receiver.name
       })
 
+      const bulkStart = Date.now()
       const result = await postexClient.createBulkParcels(requestData)
 
       if (!result) {
+        await logExternalServiceCall(this.getDbContainer(), {
+          service_name: 'postex',
+          action: 'createBulkParcels',
+          endpoint: '/api/v1/parcels/bulk',
+          status: 'error',
+          request_data: { order_id: orderId, fulfillment_id: fulfillmentId, sender_city: originCityCode, receiver_city: destinationCityCode },
+          duration_ms: Date.now() - bulkStart,
+          error_message: 'No response from Postex',
+        })
         throw new Error('خطا در ثبت مرسوله پستکس: پاسخی از سرور دریافت نشد')
       }
+
+      await logExternalServiceCall(this.getDbContainer(), {
+        service_name: 'postex',
+        action: 'createBulkParcels',
+        endpoint: '/api/v1/parcels/bulk',
+        status: 'success',
+        request_data: { order_id: orderId, fulfillment_id: fulfillmentId, sender_city: originCityCode, receiver_city: destinationCityCode, parcels_count: parcels.length },
+        response_data: { tracking_code: result.tracking_code, parcel_id: result.parcel_id },
+        duration_ms: Date.now() - bulkStart,
+      })
 
       const shipmentId = `postex_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
@@ -683,19 +718,38 @@ class PostexService extends AbstractFulfillmentProviderService {
   }
 
   async getParcelStatus(parcelId: string): Promise<number | null> {
+    const start = Date.now()
     try {
       const postexClient = new PostexClient(this.options_)
       const response = await postexClient.getParcelDetail(parcelId)
-      
+
       if (response?.isSuccess && response.current_status?.group?.code) {
+        await logExternalServiceCall(this.getDbContainer(), {
+          service_name: 'postex',
+          action: 'getParcelStatus',
+          endpoint: `/api/v1/parcels/${parcelId}`,
+          status: 'success',
+          request_data: { parcel_id: parcelId },
+          response_data: { status_code: response.current_status.group.code },
+          duration_ms: Date.now() - start,
+        })
         return response.current_status.group.code
       }
-      
+
       return null
     } catch (error) {
       console.error('❌ [POSTEX SERVICE] Error getting parcel status', {
         message: error.message,
         parcelId
+      })
+      await logExternalServiceCall(this.getDbContainer(), {
+        service_name: 'postex',
+        action: 'getParcelStatus',
+        endpoint: `/api/v1/parcels/${parcelId}`,
+        status: 'error',
+        request_data: { parcel_id: parcelId },
+        duration_ms: Date.now() - start,
+        error_message: error.message,
       })
       return null
     }

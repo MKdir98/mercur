@@ -1,6 +1,7 @@
 import { MiddlewareRoute, authenticate } from '@medusajs/framework'
 import type { MedusaNextFunction, MedusaRequest, MedusaResponse } from '@medusajs/framework'
 
+import { resolveCustomTokenAuth } from '../../shared/infra/http/middlewares/resolve-custom-token-auth'
 import { storeCartsMiddlewares } from './carts/middlewares'
 import { storeOrderSetMiddlewares } from './order-set/middlewares'
 import { storeOrderReturnRequestsMiddlewares } from './return-request/middlewares'
@@ -27,7 +28,7 @@ const bypassAuthInLocalDemo = async (
   return next()
 }
 
-const IRAN_VAT_RATE = 0.1
+const IRAN_VAT_RATE = 0
 
 const toNumber = (val: any): number => {
   if (val == null) return 0
@@ -65,6 +66,10 @@ const applyIranVatToCartResponse = (
 }
 
 export const storeMiddlewares: MiddlewareRoute[] = [
+  {
+    matcher: '/store/*',
+    middlewares: [resolveCustomTokenAuth]
+  },
   {
     method: ['GET'],
     matcher: '/store/carts/:id',

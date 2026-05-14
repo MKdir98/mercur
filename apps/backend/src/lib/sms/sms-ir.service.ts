@@ -10,6 +10,12 @@ interface SendOTPResponse {
   code?: string // فقط در sandbox mode برای debug
 }
 
+interface SendSmsResponse {
+  success: boolean
+  messageId?: string
+  error?: string
+}
+
 interface SmsIrConfig {
   apiKey: string
   lineNumber: string
@@ -127,6 +133,61 @@ export class SmsIrService {
       success: true,
       messageId: `local_${timestamp}`,
       code: code, // برای تست، کد رو برمی‌گردونیم
+    }
+  }
+
+  /**
+   * ارسال پیامک با قالب دلخواه (برای اطلاع‌رسانی سفارش و ارسال)
+   */
+  async sendTemplate(
+    phone: string,
+    templateId: string,
+    params: Record<string, string>
+  ): Promise<SendSmsResponse> {
+    const normalizedPhone = phone.replace(/[^0-9+]/g, '')
+
+    if (this.config.isSandbox) {
+      console.log('📱 [LOCAL SMS - NO FETCH] Template SMS:', {
+        phone: normalizedPhone,
+        templateId,
+        params,
+      })
+      return { success: true, messageId: `local_${Date.now()}` }
+    }
+
+    try {
+      const parameters = Object.entries(params).map(([name, value]) => ({
+        name,
+        value,
+      }))
+
+      const response = await fetch(`${this.config.baseUrl}/send/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-KEY': this.config.apiKey,
+        },
+        body: JSON.stringify({
+          mobile: normalizedPhone,
+          templateId: parseInt(templateId, 10),
+          parameters,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('SMS.ir API error:', errorText)
+        return { success: false, error: `خطا در ارسال پیامک: ${errorText}` }
+      }
+
+      const data = await response.json()
+      return { success: true, messageId: data.messageId }
+    } catch (error) {
+      console.error('SMS send error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'خطا در ارسال پیامک',
+      }
     }
   }
 

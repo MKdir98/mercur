@@ -62,6 +62,7 @@
     "@mercurjs/resend": "*",
     "@mercurjs/reviews": "*",
     "@mercurjs/seller": "*",
+    "@mercurjs/service-log": "*",
     "@mercurjs/split-order-payment": "*",
     "@mercurjs/stripe-tax-provider": "*",
     "@mercurjs/support-ticket": "*",

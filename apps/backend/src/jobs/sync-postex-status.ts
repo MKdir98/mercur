@@ -1,6 +1,7 @@
 import { MedusaContainer } from '@medusajs/framework/types'
 import { ContainerRegistrationKeys, Modules } from '@medusajs/framework/utils'
 import PostexService from '../modules/postex/service'
+import { createSmsService } from '../lib/sms/sms-ir.service'
 
 export default async function syncPostexStatusJob(container: MedusaContainer) {
   console.log('🔹 [POSTEX SYNC] Starting status sync job')
@@ -20,9 +21,9 @@ export default async function syncPostexStatusJob(container: MedusaContainer) {
   }
   
   const result = await knex.raw(
-    `SELECT id, fulfillment_id, postex_parcel_id, postex_tracking_code, status
-     FROM postex_shipment 
-     WHERE postex_parcel_id IS NOT NULL 
+    `SELECT id, fulfillment_id, order_id, postex_parcel_id, postex_tracking_code, status
+     FROM postex_shipment
+     WHERE postex_parcel_id IS NOT NULL
      AND status NOT IN ('delivered', 'canceled', 'returned', 'failed')
      LIMIT 100`
   )
@@ -92,13 +93,17 @@ export default async function syncPostexStatusJob(container: MedusaContainer) {
       
       if (newStatus !== shipment.status) {
         await knex.raw(
-          `UPDATE postex_shipment 
-           SET status = ?, updated_at = NOW() 
+          `UPDATE postex_shipment
+           SET status = ?, updated_at = NOW()
            WHERE id = ?`,
           [newStatus, shipment.id]
         )
-        
+
         console.log(`✅ [POSTEX SYNC] Updated shipment ${shipment.id} status: ${shipment.status} → ${newStatus}`)
+
+        if (newStatus === 'delivering') {
+          await sendDeliveringSmsToBuyer(container, shipment.order_id, shipment.postex_tracking_code)
+        }
       }
       
     } catch (error) {
@@ -107,6 +112,45 @@ export default async function syncPostexStatusJob(container: MedusaContainer) {
   }
   
   console.log('✅ [POSTEX SYNC] Status sync job completed')
+}
+
+async function sendDeliveringSmsToBuyer(
+  container: MedusaContainer,
+  orderId: string,
+  trackingCode: string | null
+) {
+  const templateId = process.env.SMS_IR_DELIVERING_TEMPLATE_ID
+  if (!templateId || !trackingCode) return
+
+  try {
+    const query = container.resolve(ContainerRegistrationKeys.QUERY)
+    const {
+      data: [order]
+    } = await query.graph({
+      entity: 'order',
+      fields: ['customer.phone'],
+      filters: { id: orderId }
+    })
+
+    const phone = order?.customer?.phone
+    if (!phone) return
+
+    const smsService = createSmsService()
+    const result = await smsService.sendTemplate(phone, templateId, {
+      tracking_code: trackingCode
+    })
+
+    if (!result.success) {
+      console.error(
+        `❌ [POSTEX SYNC] Failed to send delivering SMS to buyer ${phone}:`,
+        result.error
+      )
+    } else {
+      console.log(`✅ [POSTEX SYNC] Sent delivering SMS to buyer ${phone}`)
+    }
+  } catch (error) {
+    console.error(`❌ [POSTEX SYNC] Error sending delivering SMS for order ${orderId}:`, error)
+  }
 }
 
 export const config = {
