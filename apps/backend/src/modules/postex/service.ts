@@ -1,6 +1,12 @@
-import { AbstractFulfillmentProviderService, Modules, ContainerRegistrationKeys } from "@medusajs/framework/utils"
-import { PostexClient } from "../../integrations/postex/client"
-import { logExternalServiceCall } from "@mercurjs/framework"
+import {
+  AbstractFulfillmentProviderService,
+  ContainerRegistrationKeys,
+  Modules
+} from '@medusajs/framework/utils'
+
+import { logExternalServiceCall } from '@mercurjs/framework'
+
+import { PostexClient } from '../../integrations/postex/client'
 
 function getPostexFlatShippingAmountRial(): number | null {
   const raw = process.env.POSTEX_FLAT_SHIPPING_AMOUNT_RIAL
@@ -8,7 +14,7 @@ function getPostexFlatShippingAmountRial(): number | null {
     return null
   }
   const trimmed = String(raw).trim()
-  if (trimmed === "") {
+  if (trimmed === '') {
     return null
   }
   const n = Number(trimmed)
@@ -19,8 +25,8 @@ function getPostexFlatShippingAmountRial(): number | null {
 }
 
 class PostexService extends AbstractFulfillmentProviderService {
-  static identifier = "postex"
-  static LIFE_TIME = "SCOPED"
+  static identifier = 'postex'
+  static LIFE_TIME = 'SCOPED'
 
   private static globalContainer_: any = null
 
@@ -50,14 +56,14 @@ class PostexService extends AbstractFulfillmentProviderService {
   async getFulfillmentOptions() {
     return [
       {
-        id: "postex-delivery",
-        title: "ارسال پستکس",
-        type: "postex-delivery"
+        id: 'postex-delivery',
+        title: 'ارسال پستکس',
+        type: 'postex-delivery'
       },
       {
-        id: "postex-pickup",
-        title: "تحویل از مرکز پستکس", 
-        type: "postex-pickup"
+        id: 'postex-pickup',
+        title: 'تحویل از مرکز پستکس',
+        type: 'postex-pickup'
       }
     ]
   }
@@ -77,7 +83,7 @@ class PostexService extends AbstractFulfillmentProviderService {
   async calculatePrice(optionData, data, context) {
     try {
       const cartId = context?.id || context?.cart_id || data?.cart_id
-      
+
       if (!cartId) {
         throw new Error('خطا در استعلام هزینه ارسال: اطلاعات سبد خرید یافت نشد')
       }
@@ -87,7 +93,7 @@ class PostexService extends AbstractFulfillmentProviderService {
         return {
           calculated_amount: flatRial,
           is_calculated: true,
-          is_calculated_price_tax_inclusive: false,
+          is_calculated_price_tax_inclusive: false
         }
       }
 
@@ -100,7 +106,7 @@ class PostexService extends AbstractFulfillmentProviderService {
 
       // 3. Get stock location from context (already available)
       const fromLocation = context.from_location
-      
+
       if (!fromLocation?.address) {
         throw new Error('خطا در استعلام هزینه ارسال: آدرس مبدأ یافت نشد')
       }
@@ -108,14 +114,21 @@ class PostexService extends AbstractFulfillmentProviderService {
       const locationAddress = fromLocation.address
 
       // 4. Get Postex codes from city table using knex
-      const knex = this.getDbContainer().resolve(ContainerRegistrationKeys.PG_CONNECTION)
-      
+      const knex = this.getDbContainer().resolve(
+        ContainerRegistrationKeys.PG_CONNECTION
+      )
+
       if (!knex) {
-        throw new Error('خطا در استعلام هزینه ارسال: سرویس پایگاه داده در دسترس نیست')
+        throw new Error(
+          'خطا در استعلام هزینه ارسال: سرویس پایگاه داده در دسترس نیست'
+        )
       }
 
       // Helper function to get Postex code by city name and province name
-      const getPostexCodeByName = async (cityName: string, provinceName: string) => {
+      const getPostexCodeByName = async (
+        cityName: string,
+        provinceName: string
+      ) => {
         try {
           const result = await knex.raw(
             `SELECT c.postex_city_code 
@@ -126,29 +139,29 @@ class PostexService extends AbstractFulfillmentProviderService {
              LIMIT 1`,
             [cityName, provinceName]
           )
-          
+
           if (!result.rows || result.rows.length === 0) {
             return null
           }
-          
+
           const postexCode = result.rows[0].postex_city_code
-          
+
           if (!postexCode) {
             return null
           }
-          
+
           return parseInt(postexCode, 10)
         } catch (error) {
           return null
         }
       }
-      
+
       // Get origin code (from stock location address)
       const originCityCode = await getPostexCodeByName(
         locationAddress.city,
         locationAddress.province
       )
-      
+
       // Get destination code (from customer shipping address)
       const destinationCityCode = await getPostexCodeByName(
         cart.shipping_address.city,
@@ -157,7 +170,9 @@ class PostexService extends AbstractFulfillmentProviderService {
 
       // Validate we have codes
       if (!originCityCode || !destinationCityCode) {
-        throw new Error('خطا در استعلام هزینه ارسال: کد شهر مبدأ یا مقصد در سیستم پستکس یافت نشد')
+        throw new Error(
+          'خطا در استعلام هزینه ارسال: کد شهر مبدأ یا مقصد در سیستم پستکس یافت نشد'
+        )
       }
 
       // 5. Prepare parcels from cart items
@@ -165,66 +180,68 @@ class PostexService extends AbstractFulfillmentProviderService {
         throw new Error('خطا در استعلام هزینه ارسال: سبد خرید خالی است')
       }
 
-      const parcels = await Promise.all(cart.items.map(async (item, index) => {
-        const variant = item.variant
-        let weight = variant?.weight
-        let length = variant?.length
-        let width = variant?.width
-        let height = variant?.height
-        
-        if ((!weight || !length || !width || !height) && item.product_id) {
-          const product = await knex.raw(
-            `SELECT weight, length, width, height 
+      const parcels = await Promise.all(
+        cart.items.map(async (item, index) => {
+          const variant = item.variant
+          let weight = variant?.weight
+          let length = variant?.length
+          let width = variant?.width
+          let height = variant?.height
+
+          if ((!weight || !length || !width || !height) && item.product_id) {
+            const product = await knex.raw(
+              `SELECT weight, length, width, height 
              FROM product 
              WHERE id = ? AND deleted_at IS NULL 
              LIMIT 1`,
-            [item.product_id]
-          )
-          
-          if (product?.rows?.[0]) {
-            weight = weight || product.rows[0].weight
-            length = length || product.rows[0].length
-            width = width || product.rows[0].width
-            height = height || product.rows[0].height
+              [item.product_id]
+            )
+
+            if (product?.rows?.[0]) {
+              weight = weight || product.rows[0].weight
+              length = length || product.rows[0].length
+              width = width || product.rows[0].width
+              height = height || product.rows[0].height
+            }
           }
-        }
 
-        const unitPrice = variant?.calculated_price?.calculated_amount || item.unit_price || 0
-        const quantity = item.quantity || 1
-        const totalValue = unitPrice * quantity
+          const unitPrice =
+            variant?.calculated_price?.calculated_amount || item.unit_price || 0
+          const quantity = item.quantity || 1
+          const totalValue = unitPrice * quantity
 
-        return {
-          weight_kg: weight,
-          length_cm: length,
-          width_cm: width,
-          height_cm: height,
-          total_value: totalValue
-        }
-      }))
+          return {
+            weight_kg: weight,
+            length_cm: length,
+            width_cm: width,
+            height_cm: height,
+            total_value: totalValue
+          }
+        })
+      )
 
       // 6. Call Postex API
-      const postexClient = new PostexClient(this.options_)
-      const collectionType = optionData.type === 'postex-pickup' ? 'pick_up' : 'courier_drop_off'
-      const ratesPayload = { from_city_code: originCityCode, to_city_code: destinationCityCode, parcels, collection_type: collectionType }
-      const ratesStart = Date.now()
+      const postexClient = new PostexClient({
+        ...this.options_,
+        logFn: (entry) => logExternalServiceCall(this.getDbContainer(), entry)
+      })
+      const collectionType =
+        optionData.type === 'postex-pickup' ? 'pick_up' : 'courier_drop_off'
+      const ratesPayload = {
+        from_city_code: originCityCode,
+        to_city_code: destinationCityCode,
+        parcels,
+        collection_type: collectionType
+      }
 
       const result = await postexClient.calculateRates(ratesPayload)
 
       // 7. Return calculated price
       if (result && result.price) {
         const roundedPrice = Math.ceil(result.price / 5000) * 5000
-        await logExternalServiceCall(this.getDbContainer(), {
-          service_name: 'postex',
-          action: 'calculateRates',
-          endpoint: '/api/v1/shipping/quotes',
-          status: 'success',
-          request_data: { from_city_code: originCityCode, to_city_code: destinationCityCode, parcels_count: parcels.length, collection_type: collectionType },
-          response_data: { price: result.price, rounded_price: roundedPrice },
-          duration_ms: Date.now() - ratesStart,
-        })
         console.log('✅ [POSTEX SUCCESS] Shipping price calculated:', {
           price: result.price,
-          roundedPrice: roundedPrice,
+          roundedPrice,
           originCity: originCityCode,
           destinationCity: destinationCityCode,
           parcelsCount: parcels.length
@@ -236,17 +253,7 @@ class PostexService extends AbstractFulfillmentProviderService {
         }
       }
 
-      await logExternalServiceCall(this.getDbContainer(), {
-        service_name: 'postex',
-        action: 'calculateRates',
-        endpoint: '/api/v1/shipping/quotes',
-        status: 'error',
-        request_data: { from_city_code: originCityCode, to_city_code: destinationCityCode, parcels_count: parcels.length },
-        duration_ms: Date.now() - ratesStart,
-        error_message: 'No price returned from Postex',
-      })
       throw new Error('خطا در استعلام هزینه ارسال: پستکس قیمتی برنگرداند')
-
     } catch (error) {
       console.log(error)
       console.error('❌ [POSTEX ERROR]', {
@@ -274,15 +281,28 @@ class PostexService extends AbstractFulfillmentProviderService {
     orderId: string,
     fulfillmentId: string,
     locationId?: string,
-    deps?: { query?: any; knex?: any; stockLocationModule?: any; isBulk?: boolean }
+    deps?: {
+      query?: any
+      knex?: any
+      stockLocationModule?: any
+      isBulk?: boolean
+    }
   ) {
     try {
-      const query = deps?.query ?? this.getDbContainer().resolve(ContainerRegistrationKeys.QUERY)
-      const knex = deps?.knex ?? this.getDbContainer().resolve(ContainerRegistrationKeys.PG_CONNECTION)
-      const stockLocationModule = deps?.stockLocationModule ?? this.getDbContainer().resolve(Modules.STOCK_LOCATION)
-      
+      const query =
+        deps?.query ??
+        this.getDbContainer().resolve(ContainerRegistrationKeys.QUERY)
+      const knex =
+        deps?.knex ??
+        this.getDbContainer().resolve(ContainerRegistrationKeys.PG_CONNECTION)
+      const stockLocationModule =
+        deps?.stockLocationModule ??
+        this.getDbContainer().resolve(Modules.STOCK_LOCATION)
+
       if (!knex) {
-        throw new Error('خطا در ثبت مرسوله پستکس: سرویس پایگاه داده در دسترس نیست')
+        throw new Error(
+          'خطا در ثبت مرسوله پستکس: سرویس پایگاه داده در دسترس نیست'
+        )
       }
 
       const {
@@ -372,11 +392,11 @@ class PostexService extends AbstractFulfillmentProviderService {
       }
 
       const shippingMethod = order.shipping_methods?.[0]
-      
+
       console.log('🔹 [POSTEX SERVICE] Shipping method:', {
         shippingMethod: JSON.stringify(shippingMethod, null, 2)
       })
-      
+
       if (!shippingMethod) {
         throw new Error('خطا در ثبت مرسوله پستکس: روش ارسال یافت نشد')
       }
@@ -401,14 +421,19 @@ class PostexService extends AbstractFulfillmentProviderService {
           throw new Error('این سفارش از نوع پستکس نیست')
         }
 
-        throw new Error('خطا در ثبت مرسوله پستکس: انبار مبدأ یافت نشد (location_id باید در request ارسال شود)')
+        throw new Error(
+          'خطا در ثبت مرسوله پستکس: انبار مبدأ یافت نشد (location_id باید در request ارسال شود)'
+        )
       }
 
       console.log('🔹 [POSTEX SERVICE] Using location ID:', locationId)
 
-      const stockLocation = await stockLocationModule.retrieveStockLocation(locationId, {
-        relations: ['address']
-      })
+      const stockLocation = await stockLocationModule.retrieveStockLocation(
+        locationId,
+        {
+          relations: ['address']
+        }
+      )
 
       if (!stockLocation?.address) {
         throw new Error('خطا در ثبت مرسوله پستکس: آدرس انبار یافت نشد')
@@ -425,7 +450,10 @@ class PostexService extends AbstractFulfillmentProviderService {
         [locationId]
       )
 
-      if (!sellerStockLocationResult.rows || sellerStockLocationResult.rows.length === 0) {
+      if (
+        !sellerStockLocationResult.rows ||
+        sellerStockLocationResult.rows.length === 0
+      ) {
         throw new Error('خطا در ثبت مرسوله پستکس: فروشنده یافت نشد')
       }
 
@@ -461,7 +489,10 @@ class PostexService extends AbstractFulfillmentProviderService {
         phone: locationAddress.phone
       })
 
-      const getPostexCodeByName = async (cityName: string, provinceName: string) => {
+      const getPostexCodeByName = async (
+        cityName: string,
+        provinceName: string
+      ) => {
         try {
           const result = await knex.raw(
             `SELECT c.postex_city_code 
@@ -472,17 +503,17 @@ class PostexService extends AbstractFulfillmentProviderService {
              LIMIT 1`,
             [cityName, provinceName]
           )
-          
+
           if (!result.rows || result.rows.length === 0) {
             return null
           }
-          
+
           const postexCode = result.rows[0].postex_city_code
-          
+
           if (!postexCode) {
             return null
           }
-          
+
           return parseInt(postexCode, 10)
         } catch (error) {
           return null
@@ -500,78 +531,82 @@ class PostexService extends AbstractFulfillmentProviderService {
       )
 
       if (!originCityCode || !destinationCityCode) {
-        throw new Error('خطا در ثبت مرسوله پستکس: کد شهر مبدأ یا مقصد در سیستم پستکس یافت نشد')
+        throw new Error(
+          'خطا در ثبت مرسوله پستکس: کد شهر مبدأ یا مقصد در سیستم پستکس یافت نشد'
+        )
       }
 
-      const parcels = await Promise.all(order.items.map(async (item) => {
-        let weight, length, width, height
-        
-        if (item.variant_id) {
-          const variant = await knex.raw(
-            `SELECT weight, length, width, height 
+      const parcels = await Promise.all(
+        order.items.map(async (item) => {
+          let weight, length, width, height
+
+          if (item.variant_id) {
+            const variant = await knex.raw(
+              `SELECT weight, length, width, height 
              FROM product_variant 
              WHERE id = ? AND deleted_at IS NULL 
              LIMIT 1`,
-            [item.variant_id]
-          )
-          
-          if (variant?.rows?.[0]) {
-            weight = variant.rows[0].weight
-            length = variant.rows[0].length
-            width = variant.rows[0].width
-            height = variant.rows[0].height
+              [item.variant_id]
+            )
+
+            if (variant?.rows?.[0]) {
+              weight = variant.rows[0].weight
+              length = variant.rows[0].length
+              width = variant.rows[0].width
+              height = variant.rows[0].height
+            }
           }
-        }
-        
-        if ((!weight || !length || !width || !height) && item.product_id) {
-          const product = await knex.raw(
-            `SELECT weight, length, width, height 
+
+          if ((!weight || !length || !width || !height) && item.product_id) {
+            const product = await knex.raw(
+              `SELECT weight, length, width, height 
              FROM product 
              WHERE id = ? AND deleted_at IS NULL 
              LIMIT 1`,
-            [item.product_id]
-          )
-          
-          if (product?.rows?.[0]) {
-            weight = weight || product.rows[0].weight
-            length = length || product.rows[0].length
-            width = width || product.rows[0].width
-            height = height || product.rows[0].height
+              [item.product_id]
+            )
+
+            if (product?.rows?.[0]) {
+              weight = weight || product.rows[0].weight
+              length = length || product.rows[0].length
+              width = width || product.rows[0].width
+              height = height || product.rows[0].height
+            }
           }
-        }
 
-        weight = weight || 0.5
-        length = length || 20
-        width = width || 15
-        height = height || 10
+          weight = weight || 0.5
+          length = length || 20
+          width = width || 15
+          height = height || 10
 
-        const unitPrice = item.unit_price || 0
-        const quantity = item.quantity || 1
-        const totalValue = unitPrice * quantity
+          const unitPrice = item.unit_price || 0
+          const quantity = item.quantity || 1
+          const totalValue = unitPrice * quantity
 
-        return {
-          weight_kg: weight,
-          length_cm: length,
-          width_cm: width,
-          height_cm: height,
-          total_value: totalValue
-        }
-      }))
+          return {
+            weight_kg: weight,
+            length_cm: length,
+            width_cm: width,
+            height_cm: height,
+            total_value: totalValue
+          }
+        })
+      )
 
       const senderPhone = seller.phone || locationAddress.phone || '09000000000'
-      
+
       const isValidPostalCode = (code: string) => code && code.length === 10
-      
+
       let senderPostalCode = '0000000000'
       if (isValidPostalCode(locationAddress.postal_code)) {
         senderPostalCode = locationAddress.postal_code
       } else if (isValidPostalCode(seller.postal_code)) {
         senderPostalCode = seller.postal_code
       }
-      
+
       const receiverPhone = deliveryAddress.phone || '09000000000'
-      const receiverPostalCode = isValidPostalCode(deliveryAddress.postal_code) 
-        ? deliveryAddress.postal_code 
+      const receiverPostalCode = isValidPostalCode(deliveryAddress.postal_code)
+        ? deliveryAddress.postal_code
         : '0000000000'
 
       console.log('🔹 [POSTEX SERVICE] Postal codes:', {
@@ -581,7 +616,10 @@ class PostexService extends AbstractFulfillmentProviderService {
         receiver_postal_code: receiverPostalCode
       })
 
-      const postexClient = new PostexClient(this.options_)
+      const postexClient = new PostexClient({
+        ...this.options_,
+        logFn: (entry) => logExternalServiceCall(this.getDbContainer(), entry)
+      })
       const isBulk = deps?.isBulk ?? false
       const collectionType = isBulk ? 'pick_up' : 'courier_drop_off'
 
@@ -589,14 +627,18 @@ class PostexService extends AbstractFulfillmentProviderService {
         sender: {
           name: seller.name,
           phone: senderPhone,
-          address: `${locationAddress.address_1 || ''} ${locationAddress.address_2 || ''}`.trim(),
+          address:
+            `${locationAddress.address_1 || ''} ${locationAddress.address_2 || ''}`.trim(),
           city_code: originCityCode,
           postal_code: senderPostalCode
         },
         receiver: {
-          name: `${deliveryAddress.first_name || ''} ${deliveryAddress.last_name || ''}`.trim() || 'مشتری',
+          name:
+            `${deliveryAddress.first_name || ''} ${deliveryAddress.last_name || ''}`.trim() ||
+            'مشتری',
           phone: receiverPhone,
-          address: `${deliveryAddress.address_1 || ''} ${deliveryAddress.address_2 || ''}`.trim(),
+          address:
+            `${deliveryAddress.address_1 || ''} ${deliveryAddress.address_2 || ''}`.trim(),
           city_code: destinationCityCode,
           postal_code: receiverPostalCode
         },
@@ -611,31 +653,11 @@ class PostexService extends AbstractFulfillmentProviderService {
         receiver: requestData.receiver.name
       })
 
-      const bulkStart = Date.now()
       const result = await postexClient.createBulkParcels(requestData)
 
       if (!result) {
-        await logExternalServiceCall(this.getDbContainer(), {
-          service_name: 'postex',
-          action: 'createBulkParcels',
-          endpoint: '/api/v1/parcels/bulk',
-          status: 'error',
-          request_data: { order_id: orderId, fulfillment_id: fulfillmentId, sender_city: originCityCode, receiver_city: destinationCityCode },
-          duration_ms: Date.now() - bulkStart,
-          error_message: 'No response from Postex',
-        })
         throw new Error('خطا در ثبت مرسوله پستکس: پاسخی از سرور دریافت نشد')
       }
-
-      await logExternalServiceCall(this.getDbContainer(), {
-        service_name: 'postex',
-        action: 'createBulkParcels',
-        endpoint: '/api/v1/parcels/bulk',
-        status: 'success',
-        request_data: { order_id: orderId, fulfillment_id: fulfillmentId, sender_city: originCityCode, receiver_city: destinationCityCode, parcels_count: parcels.length },
-        response_data: { tracking_code: result.tracking_code, parcel_id: result.parcel_id },
-        duration_ms: Date.now() - bulkStart,
-      })
 
       const shipmentId = `postex_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
@@ -677,7 +699,6 @@ class PostexService extends AbstractFulfillmentProviderService {
         label_url: '#',
         postex_parcel_id: result.parcel_id
       }
-
     } catch (error) {
       console.error('❌ [POSTEX SERVICE] Error creating shipment', {
         message: error.message,
@@ -697,16 +718,13 @@ class PostexService extends AbstractFulfillmentProviderService {
               created_at, 
               updated_at
             ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
-            [
-              shipmentId,
-              fulfillmentId,
-              orderId,
-              'failed',
-              error.message
-            ]
+            [shipmentId, fulfillmentId, orderId, 'failed', error.message]
           )
         } catch (dbError) {
-          console.error('❌ [POSTEX SERVICE] Failed to save error to database', dbError)
+          console.error(
+            '❌ [POSTEX SERVICE] Failed to save error to database',
+            dbError
+          )
         }
       }
 
@@ -718,21 +736,14 @@ class PostexService extends AbstractFulfillmentProviderService {
   }
 
   async getParcelStatus(parcelId: string): Promise<number | null> {
-    const start = Date.now()
     try {
-      const postexClient = new PostexClient(this.options_)
+      const postexClient = new PostexClient({
+        ...this.options_,
+        logFn: (entry) => logExternalServiceCall(this.getDbContainer(), entry)
+      })
       const response = await postexClient.getParcelDetail(parcelId)
 
       if (response?.isSuccess && response.current_status?.group?.code) {
-        await logExternalServiceCall(this.getDbContainer(), {
-          service_name: 'postex',
-          action: 'getParcelStatus',
-          endpoint: `/api/v1/parcels/${parcelId}`,
-          status: 'success',
-          request_data: { parcel_id: parcelId },
-          response_data: { status_code: response.current_status.group.code },
-          duration_ms: Date.now() - start,
-        })
         return response.current_status.group.code
       }
 
@@ -742,28 +753,23 @@ class PostexService extends AbstractFulfillmentProviderService {
         message: error.message,
         parcelId
       })
-      await logExternalServiceCall(this.getDbContainer(), {
-        service_name: 'postex',
-        action: 'getParcelStatus',
-        endpoint: `/api/v1/parcels/${parcelId}`,
-        status: 'error',
-        request_data: { parcel_id: parcelId },
-        duration_ms: Date.now() - start,
-        error_message: error.message,
-      })
       return null
     }
   }
 
   async canCancelFulfillment(fulfillmentId: string): Promise<boolean> {
     try {
-      const knex = this.getDbContainer().resolve(ContainerRegistrationKeys.PG_CONNECTION)
-      
+      const knex = this.getDbContainer().resolve(
+        ContainerRegistrationKeys.PG_CONNECTION
+      )
+
       if (!knex) {
-        console.warn('⚠️ [POSTEX SERVICE] Knex not available for canCancelFulfillment')
+        console.warn(
+          '⚠️ [POSTEX SERVICE] Knex not available for canCancelFulfillment'
+        )
         return true
       }
-      
+
       const result = await knex.raw(
         `SELECT postex_parcel_id, status 
          FROM postex_shipment 
@@ -771,35 +777,39 @@ class PostexService extends AbstractFulfillmentProviderService {
          LIMIT 1`,
         [fulfillmentId]
       )
-      
+
       if (!result.rows || result.rows.length === 0) {
-        console.log('ℹ️ [POSTEX SERVICE] No Postex shipment found, allowing cancel')
+        console.log(
+          'ℹ️ [POSTEX SERVICE] No Postex shipment found, allowing cancel'
+        )
         return true
       }
-      
+
       const parcelId = result.rows[0].postex_parcel_id
-      
+
       if (!parcelId) {
         console.log('ℹ️ [POSTEX SERVICE] No parcel_id found, allowing cancel')
         return true
       }
-      
+
       const statusCode = await this.getParcelStatus(parcelId)
-      
+
       if (!statusCode) {
-        console.warn('⚠️ [POSTEX SERVICE] Could not get status from Postex, denying cancel for safety')
+        console.warn(
+          '⚠️ [POSTEX SERVICE] Could not get status from Postex, denying cancel for safety'
+        )
         return false
       }
-      
+
       const canCancel = statusCode === 1 || statusCode === 2
-      
+
       console.log('🔹 [POSTEX SERVICE] Cancel check result', {
         fulfillmentId,
         parcelId,
         statusCode,
         canCancel
       })
-      
+
       return canCancel
     } catch (error) {
       console.error('❌ [POSTEX SERVICE] Error checking if can cancel', {
@@ -821,12 +831,15 @@ class PostexService extends AbstractFulfillmentProviderService {
     }
   }
 
-  async retrieveDocuments(fulfillmentData: Record<string, unknown>, documentType: string): Promise<void> {
-    if (documentType === "label") {
+  async retrieveDocuments(
+    fulfillmentData: Record<string, unknown>,
+    documentType: string
+  ): Promise<void> {
+    if (documentType === 'label') {
       return
     }
     throw new Error(`Document type ${documentType} not supported`)
   }
 }
 
-export default PostexService 
+export default PostexService

@@ -44,7 +44,6 @@ export type RemitationOptions = {
   rialPerUsd?: number
 }
 
-const IRAN_VAT_RATE = 0.1
 
 function remitationAxiosProxyConfig():
   | { proxy: { protocol: string; host: string; port: number; auth?: { username: string; password: string } } }
@@ -109,8 +108,7 @@ function computeCartRialSubtotal(
   const itemSubtotal = toNumber(cart.item_subtotal)
   const shippingTotal = toNumber(cart.shipping_total)
   const taxTotal = toNumber(cart.tax_total)
-  const vatAmount =
-    taxTotal > 0 ? taxTotal : Math.round(itemSubtotal * IRAN_VAT_RATE)
+  const vatAmount = taxTotal
   const computedAmount = itemSubtotal + shippingTotal + vatAmount
   if (computedAmount <= 0) return fallbackAmount
   return computedAmount

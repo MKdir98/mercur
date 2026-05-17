@@ -2,9 +2,21 @@ import axios, { AxiosInstance } from 'axios'
 import { PostexParcelDetailResponse } from './types'
 import { logPostexError, logPostexRequest, logPostexResponse } from './logger'
 
+type ServiceLogEntry = {
+  service_name: string
+  action: string
+  endpoint: string
+  status: 'success' | 'error'
+  request_data?: Record<string, unknown>
+  response_data?: Record<string, unknown>
+  duration_ms: number
+  error_message?: string
+}
+
 interface PostexOptions {
   apiKey?: string
   apiUrl?: string
+  logFn?: (entry: ServiceLogEntry) => Promise<void>
 }
 
 interface ShippingQuoteRequest {
@@ -221,7 +233,31 @@ export class PostexClient {
       const endpoint = '/api/v1/shipping/quotes'
       logPostexRequest(endpoint, requestBody)
 
-      const response = await this.client.post<ShippingQuoteResponse>(endpoint, requestBody)
+      const start = Date.now()
+      let response: Awaited<ReturnType<typeof this.client.post<ShippingQuoteResponse>>>
+      try {
+        response = await this.client.post<ShippingQuoteResponse>(endpoint, requestBody)
+        await this.options.logFn?.({
+          service_name: 'postex',
+          action: 'calculateRates',
+          endpoint,
+          status: 'success',
+          request_data: requestBody as unknown as Record<string, unknown>,
+          response_data: response.data as unknown as Record<string, unknown>,
+          duration_ms: Date.now() - start,
+        })
+      } catch (httpError) {
+        await this.options.logFn?.({
+          service_name: 'postex',
+          action: 'calculateRates',
+          endpoint,
+          status: 'error',
+          request_data: requestBody as unknown as Record<string, unknown>,
+          duration_ms: Date.now() - start,
+          error_message: httpError.response?.data?.message ?? httpError.message,
+        })
+        throw httpError
+      }
 
       logPostexResponse(endpoint, response.data)
 
@@ -336,6 +372,15 @@ export class PostexClient {
         const endpoint = '/api/v1/parcels/bulk'
         logPostexRequest(endpoint, params)
         logPostexResponse(endpoint, mockResponse)
+        await this.options.logFn?.({
+          service_name: 'postex',
+          action: 'createBulkParcels',
+          endpoint,
+          status: 'success',
+          request_data: params as unknown as Record<string, unknown>,
+          response_data: mockResponse as unknown as Record<string, unknown>,
+          duration_ms: 0,
+        })
         const result = mockResponse.result[0]
         const parcelNo = result.data.parcel_no
         const tracking = result.data.shipments[0].tracking
@@ -429,7 +474,31 @@ export class PostexClient {
       const endpoint = '/api/v1/parcels/bulk'
       logPostexRequest(endpoint, requestBody)
 
-      const response = await this.client.post<BulkParcelResponse>(endpoint, requestBody)
+      const bulkStart = Date.now()
+      let response: Awaited<ReturnType<typeof this.client.post<BulkParcelResponse>>>
+      try {
+        response = await this.client.post<BulkParcelResponse>(endpoint, requestBody)
+        await this.options.logFn?.({
+          service_name: 'postex',
+          action: 'createBulkParcels',
+          endpoint,
+          status: 'success',
+          request_data: requestBody as unknown as Record<string, unknown>,
+          response_data: response.data as unknown as Record<string, unknown>,
+          duration_ms: Date.now() - bulkStart,
+        })
+      } catch (httpError) {
+        await this.options.logFn?.({
+          service_name: 'postex',
+          action: 'createBulkParcels',
+          endpoint,
+          status: 'error',
+          request_data: requestBody as unknown as Record<string, unknown>,
+          duration_ms: Date.now() - bulkStart,
+          error_message: httpError.response?.data?.message ?? httpError.message,
+        })
+        throw httpError
+      }
 
       logPostexResponse(endpoint, response.data)
 
@@ -498,14 +567,37 @@ export class PostexClient {
 
       logPostexRequest(endpoint, { parcelNo })
 
-      const response = await this.client.get(endpoint, {
-        responseType: 'arraybuffer'
-      })
+      const labelStart = Date.now()
+      let labelData: ArrayBuffer | undefined
+      try {
+        const res = await this.client.get<ArrayBuffer>(endpoint, { responseType: 'arraybuffer' })
+        labelData = res.data
+        await this.options.logFn?.({
+          service_name: 'postex',
+          action: 'getParcelLabel',
+          endpoint,
+          status: 'success',
+          request_data: { parcel_no: parcelNo },
+          response_data: { byte_length: labelData?.byteLength },
+          duration_ms: Date.now() - labelStart,
+        })
+      } catch (httpError) {
+        await this.options.logFn?.({
+          service_name: 'postex',
+          action: 'getParcelLabel',
+          endpoint,
+          status: 'error',
+          request_data: { parcel_no: parcelNo },
+          duration_ms: Date.now() - labelStart,
+          error_message: httpError.response?.data?.message ?? httpError.message,
+        })
+        throw httpError
+      }
 
-      logPostexResponse(endpoint, { byteLength: response.data?.byteLength })
+      logPostexResponse(endpoint, { byteLength: labelData?.byteLength })
 
-      if (response.data && response.data.byteLength > 0) {
-        return response.data as ArrayBuffer
+      if (labelData && labelData.byteLength > 0) {
+        return labelData
       }
 
       return null
@@ -521,19 +613,36 @@ export class PostexClient {
 
   async getParcelDetail(parcelId: string): Promise<PostexParcelDetailResponse | null> {
     const endpoint = `/api/v1/parcels/${parcelId}`
+    if (!this.options.apiKey) {
+      throw new Error('API key is required')
+    }
+
+    logPostexRequest(endpoint, { parcelId })
+
+    const detailStart = Date.now()
     try {
-      if (!this.options.apiKey) {
-        throw new Error('API key is required')
-      }
-
-      logPostexRequest(endpoint, { parcelId })
-
       const response = await this.client.get<PostexParcelDetailResponse>(endpoint)
-
+      await this.options.logFn?.({
+        service_name: 'postex',
+        action: 'getParcelDetail',
+        endpoint,
+        status: 'success',
+        request_data: { parcel_id: parcelId },
+        response_data: response.data as unknown as Record<string, unknown>,
+        duration_ms: Date.now() - detailStart,
+      })
       logPostexResponse(endpoint, response.data)
-
       return response.data
     } catch (error) {
+      await this.options.logFn?.({
+        service_name: 'postex',
+        action: 'getParcelDetail',
+        endpoint,
+        status: 'error',
+        request_data: { parcel_id: parcelId },
+        duration_ms: Date.now() - detailStart,
+        error_message: error.response?.data?.message ?? error.message,
+      })
       logPostexError(endpoint, {
         status: error.response?.status,
         message: error.response?.data?.message,
