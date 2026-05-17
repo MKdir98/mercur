@@ -23,10 +23,12 @@ export const formatOrderSets = (
       MathBN.convert(0)
     )
 
-    const shippingTaxTotal = orderSet.orders.reduce(
-      (acc, order) => MathBN.add(acc, order.shipping_tax_total!),
-      MathBN.convert(0)
-    )
+    const shippingTaxTotal = orderSet.orders.reduce((acc, order) => {
+      console.log(
+        `[shipping_tax_total] order_id=${order.id} raw=${JSON.stringify(order.shipping_tax_total)}`
+      )
+      return MathBN.add(acc, order.shipping_tax_total!)
+    }, MathBN.convert(0))
 
     const shippingTotal = orderSet.orders.reduce(
       (acc, order) => MathBN.add(acc, order.shipping_total!),
