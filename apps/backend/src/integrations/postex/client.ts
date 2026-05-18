@@ -463,9 +463,9 @@ export class PostexClient {
             box_type_id: 1
           },
           added_service: {
-            request_label: true,
+            request_label: false,
             request_packaging: false,
-            request_sms_notification: true
+            request_sms_notification: false
           },
           ready_to_accept: false
         }))
