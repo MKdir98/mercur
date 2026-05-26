@@ -21,6 +21,8 @@ const CSV_SAMPLE = `en,fa
 "Product A","محصول آ"
 "Electronics","الکترونیک"
 "Category Name","نام دسته"
+"We are a premium fashion brand","ما یک برند مد ممتاز هستیم"
+"High quality products for everyone","محصولات با کیفیت بالا برای همه"
 `;
 
 const TranslationsPage = () => {
@@ -89,8 +91,8 @@ const TranslationsPage = () => {
         <div>
           <Heading>Translations (EN → FA)</Heading>
           <Text className="text-ui-fg-subtle" size="small">
-            Manage English to Persian translations for product titles and
-            category names
+            Manage English to Persian translations for product titles, descriptions,
+            category names, and brand descriptions
           </Text>
         </div>
         <div className="flex gap-2">

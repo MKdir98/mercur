@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Button, Input, Label, toast } from "@medusajs/ui";
+import { Button, Label, Textarea, toast } from "@medusajs/ui";
 import { useUpdateTranslation } from "../../../../hooks/api/translations";
 import { Translation } from "../types";
 
@@ -46,18 +46,20 @@ const EditTranslationForm = ({ translation, onSuccess }: Props) => {
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <div>
         <Label htmlFor="edit_source_text">English (source)</Label>
-        <Input
+        <Textarea
           id="edit_source_text"
           value={sourceText}
           onChange={(e) => setSourceText(e.target.value)}
+          rows={4}
         />
       </div>
       <div>
         <Label htmlFor="edit_translated_text">Persian (translation)</Label>
-        <Input
+        <Textarea
           id="edit_translated_text"
           value={translatedText}
           onChange={(e) => setTranslatedText(e.target.value)}
+          rows={4}
         />
       </div>
       <Button type="submit" isLoading={loading}>

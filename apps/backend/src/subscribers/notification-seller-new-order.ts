@@ -7,6 +7,8 @@ import {
 
 import { ResendNotificationTemplates } from '@mercurjs/resend'
 
+import { orderCode } from '../shared/utils'
+
 export default async function sellerNewOrderHandler({
   event,
   container
@@ -60,7 +62,10 @@ export default async function sellerNewOrderHandler({
       channel: 'email',
       template: ResendNotificationTemplates.SELLER_NEW_ORDER,
       content: {
-        subject: `New order #${(order as { display_id?: string }).display_id ?? order.id} received`
+        subject: `New order ${(() => {
+          const d = (order as { display_id?: number }).display_id
+          return d ? orderCode(d) : order.id
+        })()} received`
       },
       data: {
         data: {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Input, Label, toast } from "@medusajs/ui";
+import { Button, Label, Textarea, toast } from "@medusajs/ui";
 import { useCreateTranslation } from "../../../../hooks/api/translations";
 
 type Props = {
@@ -40,20 +40,22 @@ const CreateTranslationForm = ({ onSuccess }: Props) => {
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <div>
         <Label htmlFor="source_text">English (source)</Label>
-        <Input
+        <Textarea
           id="source_text"
           value={sourceText}
           onChange={(e) => setSourceText(e.target.value)}
-          placeholder="Product title or category name"
+          placeholder="Product title, category name, or description"
+          rows={4}
         />
       </div>
       <div>
         <Label htmlFor="translated_text">Persian (translation)</Label>
-        <Input
+        <Textarea
           id="translated_text"
           value={translatedText}
           onChange={(e) => setTranslatedText(e.target.value)}
-          placeholder="عنوان محصول یا نام دسته"
+          placeholder="عنوان محصول، نام دسته یا توضیحات"
+          rows={4}
         />
       </div>
       <Button type="submit" isLoading={loading}>

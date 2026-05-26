@@ -4,6 +4,7 @@ import { ContainerRegistrationKeys, Modules } from '@medusajs/framework/utils'
 import { ResendNotificationTemplates } from '@mercurjs/resend'
 
 import { Hosts, buildHostAddress } from '../shared/infra/http/utils'
+import { orderCode } from '../shared/utils'
 
 export default async function sellerCancelOrderHandler({
   event,
@@ -37,27 +38,35 @@ export default async function sellerCancelOrderHandler({
 
   const sellerEmail = order.seller?.email
   if (!sellerEmail) return
-  await notificationService.createNotifications([{
-    to: sellerEmail,
-    channel: 'email',
-    template: ResendNotificationTemplates.SELLER_CANCELED_ORDER,
-    content: {
-      subject: `Your order #${(order as { display_id?: string }).display_id ?? order.id} has been canceled`
-    },
-    data: {
+  await notificationService.createNotifications([
+    {
+      to: sellerEmail,
+      channel: 'email',
+      template: ResendNotificationTemplates.SELLER_CANCELED_ORDER,
+      content: {
+        subject: `Your order ${(() => {
+          const d = (order as { display_id?: number }).display_id
+          return d ? orderCode(d) : order.id
+        })()} has been canceled`
+      },
       data: {
-        order: {
-          id: order.id,
-          display_id: (order as { display_id?: string }).display_id,
-          item: order.items
-        },
-        order_address: buildHostAddress(
-          Hosts.VENDOR_PANEL,
-          `/orders/${order.id}`
-        ).toString()
+        data: {
+          order: {
+            id: order.id,
+            display_id: (() => {
+              const d = (order as { display_id?: number }).display_id
+              return d ? orderCode(d) : order.id
+            })(),
+            item: order.items
+          },
+          order_address: buildHostAddress(
+            Hosts.VENDOR_PANEL,
+            `/orders/${order.id}`
+          ).toString()
+        }
       }
     }
-  }])
+  ])
 }
 
 export const config: SubscriberConfig = {

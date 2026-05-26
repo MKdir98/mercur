@@ -5,6 +5,7 @@ import {
 } from '@medusajs/framework/utils'
 
 import { createSmsService } from '../lib/sms/sms-ir.service'
+import { orderCode } from '../shared/utils'
 
 export default async function smsBuyerNewOrderHandler({
   event,
@@ -27,9 +28,10 @@ export default async function smsBuyerNewOrderHandler({
 
   const smsService = createSmsService()
   const result = await smsService.sendTemplate(phone, templateId, {
-    order_id: String(
-      (order as { display_id?: number }).display_id ?? order.id
-    )
+    order_id: (() => {
+      const displayId = (order as { display_id?: number }).display_id
+      return displayId ? orderCode(displayId) : order.id
+    })()
   })
 
   if (!result.success) {
