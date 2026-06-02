@@ -1,15 +1,16 @@
+import { randomInt } from "crypto"
 import type { MedusaRequest, MedusaResponse } from '@medusajs/framework/http'
 
 // Simple in-memory store for demo/local
 const store = new Map<string, { code: string; timestamp: number }>()
 
 function isSandbox() {
-  const env = process.env.APP_ENV || process.env.NODE_ENV || 'development'
-  return env === 'local' || env === 'demo' || env === 'development'
+  const env = process.env.APP_ENV
+  return env === 'local' || env === 'demo'
 }
 
 function generateCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString()
+  return randomInt(100000, 1000000).toString()
 }
 
 /**

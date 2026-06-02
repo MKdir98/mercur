@@ -2,6 +2,7 @@
  * SMS.ir Service for Backend
  * ارسال پیامک OTP از طریق SMS.ir
  */
+import { randomInt } from "crypto"
 
 interface SendOTPResponse {
   success: boolean
@@ -224,7 +225,7 @@ export class SmsIrService {
  * تولید کد OTP 6 رقمی
  */
 export function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString()
+  return randomInt(100000, 1000000).toString()
 }
 
 /**

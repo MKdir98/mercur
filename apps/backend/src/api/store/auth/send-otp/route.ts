@@ -5,8 +5,6 @@ import { otpSubjectKey } from "../../../../lib/otp/otp-subject"
 import { storeOTP, getOTP } from "../../../../lib/otp/otp-store"
 import { createSmsService, generateOTP } from "../../../../lib/sms/sms-ir.service"
 
-const MAX_OTP_REQUESTS_PER_HOUR = 3
-
 export async function POST(
   req: MedusaRequest,
   res: MedusaResponse
@@ -135,7 +133,6 @@ export async function POST(
       success: true,
       message: "کد تایید با موفقیت ارسال شد",
       messageId: result.messageId,
-      ...(result.code && { code: result.code }),
     })
   } catch (error) {
     console.error("Send OTP error:", error)

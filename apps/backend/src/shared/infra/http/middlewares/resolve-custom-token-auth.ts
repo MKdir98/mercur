@@ -1,4 +1,5 @@
 import type { MedusaNextFunction, MedusaRequest, MedusaResponse } from '@medusajs/framework'
+import { verifyCustomerToken } from '../../../../lib/auth/customer-token'
 
 type AuthContext = { actor_id: string; actor_type: string }
 
@@ -28,14 +29,8 @@ export function resolveCustomTokenAuth(
   if (!authHeader?.startsWith('Bearer ')) return next()
 
   const token = authHeader.slice(7) // remove "Bearer "
-  if (!token.startsWith('cust_')) return next()
-
-  // Format: cust_<customerId>_<timestamp>
-  const withoutPrefix = token.slice(5)
-  const lastUnderscore = withoutPrefix.lastIndexOf('_')
-  if (lastUnderscore <= 0) return next()
-
-  const customerId = withoutPrefix.slice(0, lastUnderscore)
+  const customerId = verifyCustomerToken(token)
+  if (!customerId) return next()
   ;(req as any).auth_context = { actor_id: customerId, actor_type: 'customer' } as AuthContext
   next()
 }

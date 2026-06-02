@@ -80,10 +80,7 @@ export async function POST(
       customer = customers && customers.length > 0 ? customers[0] : null
 
       if (!customer) {
-        res.status(404).json({
-          success: false,
-          message: "کاربر با این ایمیل یافت نشد",
-        })
+        res.json({ success: true, message: "اگر حساب وجود داشته باشد، رمز عبور بروزرسانی شد" })
         return
       }
     } else {
@@ -95,10 +92,7 @@ export async function POST(
       customer = customers && customers.length > 0 ? customers[0] : null
 
       if (!customer) {
-        res.status(404).json({
-          success: false,
-          message: "کاربر با این شماره تلفن یافت نشد",
-        })
+        res.json({ success: true, message: "اگر حساب وجود داشته باشد، رمز عبور بروزرسانی شد" })
         return
       }
     }
@@ -121,7 +115,6 @@ export async function POST(
     res.status(500).json({
       success: false,
       message: "خطای سرور",
-      error: error instanceof Error ? error.message : "Unknown error",
     })
   }
 }

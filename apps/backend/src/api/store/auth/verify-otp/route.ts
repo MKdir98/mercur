@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "crypto"
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { getRegistrationChannel } from "../../../../lib/auth/registration-channel"
 import { isValidEmailAddress } from "../../../../lib/email/otp-mail.service"
@@ -82,7 +83,10 @@ export async function POST(
     return
   }
 
-  if (storedData.code !== code) {
+  const storedBuf = Buffer.from(storedData.code, "utf8")
+  const providedBuf = Buffer.from((code ?? "").slice(0, storedData.code.length), "utf8")
+  const codeMatch = storedBuf.length === providedBuf.length && timingSafeEqual(storedBuf, providedBuf)
+  if (!codeMatch) {
     const attempts = incrementAttempts(subjectKey)
     const remainingAttempts = MAX_ATTEMPTS - attempts
 

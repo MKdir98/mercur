@@ -8,7 +8,7 @@ export async function POST(
   res: MedusaResponse
 ): Promise<void> {
   const isLocal =
-    process.env.APP_ENV === "local" || process.env.APP_ENV === "demo"
+    process.env.APP_ENV === "local"
 
   if (!isLocal) {
     res.status(404).json({

@@ -45,7 +45,7 @@ export async function GET(
   res: MedusaResponse
 ): Promise<void> {
   // فقط در local/demo
-  const isLocal = process.env.APP_ENV === 'local' || process.env.APP_ENV === 'demo'
+  const isLocal = process.env.APP_ENV === 'local'
   
   if (!isLocal) {
     res.status(404).json({

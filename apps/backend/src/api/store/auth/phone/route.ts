@@ -1,4 +1,5 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { signCustomerToken } from "../../../../lib/auth/customer-token"
 import { Modules } from "@medusajs/framework/utils"
 import bcrypt from "bcrypt"
 import { getRegistrationChannel } from "../../../../lib/auth/registration-channel"
@@ -100,6 +101,11 @@ export async function POST(
           password_hash: passwordHash,
         }
         if (dateOfBirth && dateOfBirth.trim()) {
+          const dobRegex = /^\d{4}-\d{2}-\d{2}$/
+          if (!dobRegex.test(dateOfBirth.trim())) {
+            res.status(400).json({ success: false, message: "فرمت تاریخ تولد باید YYYY-MM-DD باشد" })
+            return
+          }
           metadata.date_of_birth = dateOfBirth.trim()
         }
 
@@ -133,7 +139,7 @@ export async function POST(
             req.session.customer_id = customer.id
           }
 
-          const token = `cust_${customer.id}_${Date.now()}`
+          const token = signCustomerToken(customer.id)
 
           res.json({
             success: true,
@@ -268,7 +274,7 @@ export async function POST(
           req.session.customer_id = customer.id
         }
 
-        const token = `cust_${customer.id}_${Date.now()}`
+        const token = signCustomerToken(customer.id)
 
         res.json({
           success: true,
@@ -313,7 +319,6 @@ export async function POST(
     res.status(500).json({
       success: false,
       message: "خطای سرور",
-      error: error instanceof Error ? error.message : "Unknown error",
     })
   }
 }

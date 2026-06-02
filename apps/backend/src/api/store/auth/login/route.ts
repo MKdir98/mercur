@@ -1,4 +1,6 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { signCustomerToken } from "../../../../lib/auth/customer-token"
+import { checkLoginRateLimit, recordLoginFailure, resetLoginAttempts } from "../../../../lib/auth/login-rate-limiter"
 import bcrypt from "bcrypt"
 import { getRegistrationChannel } from "../../../../lib/auth/registration-channel"
 import { otpSubjectKey } from "../../../../lib/otp/otp-subject"
@@ -35,6 +37,8 @@ export async function POST(
       metadata?: Record<string, unknown> | null
     } | null = null
 
+    let rateLimitKey: string
+
     if (channel === "email") {
       const raw = email?.trim()
       if (!raw) {
@@ -45,6 +49,7 @@ export async function POST(
         return
       }
       const normalizedEmail = otpSubjectKey("email", raw)
+      rateLimitKey = normalizedEmail
 
       const { data: customers } = await query.graph({
         entity: "customer",
@@ -65,6 +70,7 @@ export async function POST(
       }
 
       const normalizedPhone = phone.replace(/[^0-9+]/g, "")
+      rateLimitKey = normalizedPhone
 
       const { data: customers } = await query.graph({
         entity: "customer",
@@ -99,12 +105,19 @@ export async function POST(
       return
     }
 
+    const rateCheck = checkLoginRateLimit(rateLimitKey)
+    if (!rateCheck.allowed) {
+      res.status(429).json({ success: false, message: `حساب قفل شده است. ${rateCheck.remainingSeconds} ثانیه دیگر تلاش کنید` })
+      return
+    }
+
     const isPasswordValid = await bcrypt.compare(
       password,
       String(passwordHash)
     )
 
     if (!isPasswordValid) {
+      recordLoginFailure(rateLimitKey)
       res.status(401).json({
         success: false,
         message:
@@ -115,6 +128,8 @@ export async function POST(
       return
     }
 
+    resetLoginAttempts(rateLimitKey)
+
     if (req.session) {
       req.session.auth_context = {
         actor_id: customer.id,
@@ -123,7 +138,7 @@ export async function POST(
       req.session.customer_id = customer.id
     }
 
-    const token = `cust_${customer.id}_${Date.now()}`
+    const token = signCustomerToken(customer.id)
 
     res.json({
       success: true,
@@ -142,7 +157,6 @@ export async function POST(
     res.status(500).json({
       success: false,
       message: "خطای سرور",
-      error: error instanceof Error ? error.message : "Unknown error",
     })
   }
 }
