@@ -1,23 +1,41 @@
-import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
-import { ContainerRegistrationKeys, Modules } from '@medusajs/framework/utils'
 import { z } from 'zod'
 
-import { TRANSLATIONS_MODULE, TranslationsModuleService } from '@mercurjs/translations'
-import { applyTranslations, shouldTranslate } from '../../../shared/utils/apply-translations'
+import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
+import { ContainerRegistrationKeys, Modules } from '@medusajs/framework/utils'
+
+import {
+  TRANSLATIONS_MODULE,
+  TranslationsModuleService
+} from '@mercurjs/translations'
+
 import sellerProduct from '../../../links/seller-product'
+import {
+  applyTranslations,
+  shouldTranslate
+} from '../../../shared/utils/apply-translations'
 
 const RichProductsQuerySchema = z.object({
   limit: z.coerce.number().optional().default(12),
   offset: z.coerce.number().optional().default(0),
   country_code: z.string().optional(),
   region_id: z.string().optional(),
-  sort_by: z.enum(['sales_count', 'created_at', 'updated_at', 'title', 'price_asc', 'price_desc']).optional().default('created_at'),
+  sort_by: z
+    .enum([
+      'sales_count',
+      'created_at',
+      'updated_at',
+      'title',
+      'price_asc',
+      'price_desc'
+    ])
+    .optional()
+    .default('created_at'),
   seller_id: z.string().optional(),
   handle: z.string().optional(),
   category_id: z.string().optional(),
   category_handle: z.string().optional(),
   collection_id: z.string().optional(),
-  include_facets: z.coerce.boolean().optional().default(false),
+  include_facets: z.coerce.boolean().optional().default(false)
 })
 
 type RichProductsQueryType = z.infer<typeof RichProductsQuerySchema>
@@ -30,16 +48,26 @@ export const GET = async (
 
   try {
     const validatedQuery = RichProductsQuerySchema.parse(req.query)
-    const { limit, offset, sort_by, seller_id, handle, category_id, category_handle, collection_id, include_facets } = validatedQuery
+    const {
+      limit,
+      offset,
+      sort_by,
+      seller_id,
+      handle,
+      category_id,
+      category_handle,
+      collection_id,
+      include_facets
+    } = validatedQuery
 
     // Base filters for products
     const filters: Record<string, any> = { status: 'published' }
-    
+
     // Add handle filter if provided
     if (handle) {
       filters['handle'] = handle
     }
-    
+
     // Add category filter if provided
     let resolvedCategoryId = category_id
     if (category_handle && !category_id) {
@@ -52,11 +80,11 @@ export const GET = async (
         resolvedCategoryId = categories[0].id
       }
     }
-    
+
     if (resolvedCategoryId) {
       filters['categories'] = { id: resolvedCategoryId }
     }
-    
+
     // Add collection filter if provided
     if (collection_id) {
       filters['collection_id'] = collection_id
@@ -67,24 +95,66 @@ export const GET = async (
     if (seller_id) {
       const { data: sellerLinks } = await query.graph({
         entity: sellerProduct.entryPoint,
-        fields: ['product_id', 'seller_id', 'seller.handle', 'seller.name', 'seller.store_status'],
+        fields: [
+          'product_id',
+          'seller_id',
+          'seller.handle',
+          'seller.name',
+          'seller.photo',
+          'seller.store_status',
+          'seller.members.photo',
+          'seller.members.role'
+        ],
         filters: { seller_id }
       })
 
       const productIds = (sellerLinks || []).map((l: any) => l.product_id)
       if (productIds.length === 0) {
-        return res.json({ products: [], count: 0, limit, offset, sort_by, facets: include_facets ? { categories: [], brands: [] } : undefined })
+        return res.json({
+          products: [],
+          count: 0,
+          limit,
+          offset,
+          sort_by,
+          facets: include_facets ? { categories: [], brands: [] } : undefined
+        })
       }
       filters['id'] = productIds
       productIdToSeller = Object.fromEntries(
-        (sellerLinks || []).map((l: any) => [
-          l.product_id,
-          { id: l.seller_id, handle: l.seller?.handle, name: l.seller?.name, store_status: l.seller?.store_status }
-        ])
+        (sellerLinks || []).map((l: any) => {
+          const members = l.seller?.members || []
+          const owner =
+            members.find((m: any) => m?.role === 'owner') || members[0]
+          return [
+            l.product_id,
+            {
+              id: l.seller_id,
+              handle: l.seller?.handle,
+              name: l.seller?.name,
+              photo: l.seller?.photo || owner?.photo || null,
+              store_status: l.seller?.store_status
+            }
+          ]
+        })
       )
     }
 
-    let facets: { categories: Array<{ id: string; handle: string; name: string; count: number }>; brands: Array<{ id: string; handle: string; name: string; count: number }> } | undefined
+    let facets:
+      | {
+          categories: Array<{
+            id: string
+            handle: string
+            name: string
+            count: number
+          }>
+          brands: Array<{
+            id: string
+            handle: string
+            name: string
+            count: number
+          }>
+        }
+      | undefined
     if (include_facets) {
       const { data: facetProducts } = await query.graph({
         entity: 'product',
@@ -93,7 +163,10 @@ export const GET = async (
         pagination: { skip: 0, take: 10000 }
       })
       const facetProductIds = (facetProducts || []).map((p: any) => p.id)
-      const categoryCounts = new Map<string, { id: string; handle: string; name: string; count: number }>()
+      const categoryCounts = new Map<
+        string,
+        { id: string; handle: string; name: string; count: number }
+      >()
       for (const p of facetProducts || []) {
         for (const cat of p.categories || []) {
           if (cat?.id) {
@@ -101,7 +174,12 @@ export const GET = async (
             if (existing) {
               existing.count++
             } else {
-              categoryCounts.set(cat.id, { id: cat.id, handle: cat.handle || '', name: cat.name || '', count: 1 })
+              categoryCounts.set(cat.id, {
+                id: cat.id,
+                handle: cat.handle || '',
+                name: cat.name || '',
+                count: 1
+              })
             }
           }
         }
@@ -115,7 +193,10 @@ export const GET = async (
         })
         sellerLinksForFacets = links || []
       }
-      const brandCounts = new Map<string, { id: string; handle: string; name: string; count: number }>()
+      const brandCounts = new Map<
+        string,
+        { id: string; handle: string; name: string; count: number }
+      >()
       for (const l of sellerLinksForFacets) {
         const s = l.seller_id
         if (s) {
@@ -123,13 +204,22 @@ export const GET = async (
           if (existing) {
             existing.count++
           } else {
-            brandCounts.set(s, { id: s, handle: l.seller?.handle || '', name: l.seller?.name || '', count: 1 })
+            brandCounts.set(s, {
+              id: s,
+              handle: l.seller?.handle || '',
+              name: l.seller?.name || '',
+              count: 1
+            })
           }
         }
       }
       facets = {
-        categories: Array.from(categoryCounts.values()).sort((a, b) => b.count - a.count),
-        brands: Array.from(brandCounts.values()).sort((a, b) => b.count - a.count)
+        categories: Array.from(categoryCounts.values()).sort(
+          (a, b) => b.count - a.count
+        ),
+        brands: Array.from(brandCounts.values()).sort(
+          (a, b) => b.count - a.count
+        )
       }
     }
 
@@ -172,92 +262,149 @@ export const GET = async (
     if (!Object.keys(productIdToSeller).length && (products || []).length) {
       const { data: links } = await query.graph({
         entity: sellerProduct.entryPoint,
-        fields: ['product_id', 'seller_id', 'seller.handle', 'seller.name', 'seller.store_status'],
+        fields: [
+          'product_id',
+          'seller_id',
+          'seller.handle',
+          'seller.name',
+          'seller.photo',
+          'seller.store_status',
+          'seller.members.photo',
+          'seller.members.role'
+        ],
         filters: { product_id: (products || []).map((p: any) => p.id) }
       })
       productIdToSeller = Object.fromEntries(
-        (links || []).map((l: any) => [
-          l.product_id,
-          { id: l.seller_id, handle: l.seller?.handle, name: l.seller?.name, store_status: l.seller?.store_status }
-        ])
+        (links || []).map((l: any) => {
+          const members = l.seller?.members || []
+          const owner =
+            members.find((m: any) => m?.role === 'owner') || members[0]
+          return [
+            l.product_id,
+            {
+              id: l.seller_id,
+              handle: l.seller?.handle,
+              name: l.seller?.name,
+              photo: l.seller?.photo || owner?.photo || null,
+              store_status: l.seller?.store_status
+            }
+          ]
+        })
       )
     }
 
-    const transformedProducts = await Promise.all((products as any[]).map(async (product: any) => {
-      if (!product.variants?.length) return product
+    const transformedProducts = await Promise.all(
+      (products as any[]).map(async (product: any) => {
+        if (!product.variants?.length) return product
 
-      const variantsWithPrices = await Promise.all(product.variants.map(async (variant: any) => {
-        const inventoryQuantity = (variant.inventory_items)
-          .flatMap((item: any) => (item.inventory.location_levels))
-          .reduce((sum: number, level: any) => sum + (Number(level.stocked_quantity)) - (Number(level.reserved_quantity)), 0)
+        const variantsWithPrices = await Promise.all(
+          product.variants.map(async (variant: any) => {
+            const inventoryQuantity = variant.inventory_items
+              .flatMap((item: any) => item.inventory.location_levels)
+              .reduce(
+                (sum: number, level: any) =>
+                  sum +
+                  Number(level.stocked_quantity) -
+                  Number(level.reserved_quantity),
+                0
+              )
 
-        const basePrice = variant.prices?.[0]
-        if (!basePrice) {
-          return { ...variant, inventory_quantity: inventoryQuantity, calculated_price: null }
-        }
-
-        try {
-          const calculatedPrices = await pricingService.calculatePrices(
-            { id: [basePrice.price_set_id] },
-            { context: { currency_code: basePrice.currency_code || 'IRR' } }
-          )
-
-          const calculatedPrice = calculatedPrices?.[0]
-
-          return {
-            ...variant,
-            inventory_quantity: inventoryQuantity,
-            calculated_price: calculatedPrice ? {
-              calculated_amount: calculatedPrice.calculated_amount,
-              calculated_amount_with_tax: calculatedPrice.calculated_amount,
-              original_amount: (calculatedPrice as any).original_amount || basePrice.amount,
-              original_amount_with_tax: (calculatedPrice as any).original_amount || basePrice.amount,
-              currency_code: basePrice.currency_code || 'IRR',
-              price_list_type: (calculatedPrice as any).price_list_type || null
-            } : {
-              calculated_amount: basePrice.amount,
-              calculated_amount_with_tax: basePrice.amount,
-              original_amount: basePrice.amount,
-              original_amount_with_tax: basePrice.amount,
-              currency_code: basePrice.currency_code || 'IRR'
+            const basePrice = variant.prices?.[0]
+            if (!basePrice) {
+              return {
+                ...variant,
+                inventory_quantity: inventoryQuantity,
+                calculated_price: null
+              }
             }
-          }
-        } catch (error) {
-          console.error('Error calculating price for variant:', variant.id, error)
-          return {
-            ...variant,
-            inventory_quantity: inventoryQuantity,
-            calculated_price: {
-              calculated_amount: basePrice.amount,
-              calculated_amount_with_tax: basePrice.amount,
-              original_amount: basePrice.amount,
-              original_amount_with_tax: basePrice.amount,
-              currency_code: basePrice.currency_code || 'IRR'
-            }
-          }
-        }
-      }))
 
-      const seller = productIdToSeller[product.id] || null
-      return { ...product, seller, variants: variantsWithPrices }
-    }))
+            try {
+              const calculatedPrices = await pricingService.calculatePrices(
+                { id: [basePrice.price_set_id] },
+                { context: { currency_code: basePrice.currency_code || 'IRR' } }
+              )
+
+              const calculatedPrice = calculatedPrices?.[0]
+
+              return {
+                ...variant,
+                inventory_quantity: inventoryQuantity,
+                calculated_price: calculatedPrice
+                  ? {
+                      calculated_amount: calculatedPrice.calculated_amount,
+                      calculated_amount_with_tax:
+                        calculatedPrice.calculated_amount,
+                      original_amount:
+                        (calculatedPrice as any).original_amount ||
+                        basePrice.amount,
+                      original_amount_with_tax:
+                        (calculatedPrice as any).original_amount ||
+                        basePrice.amount,
+                      currency_code: basePrice.currency_code || 'IRR',
+                      price_list_type:
+                        (calculatedPrice as any).price_list_type || null
+                    }
+                  : {
+                      calculated_amount: basePrice.amount,
+                      calculated_amount_with_tax: basePrice.amount,
+                      original_amount: basePrice.amount,
+                      original_amount_with_tax: basePrice.amount,
+                      currency_code: basePrice.currency_code || 'IRR'
+                    }
+              }
+            } catch (error) {
+              console.error(
+                'Error calculating price for variant:',
+                variant.id,
+                error
+              )
+              return {
+                ...variant,
+                inventory_quantity: inventoryQuantity,
+                calculated_price: {
+                  calculated_amount: basePrice.amount,
+                  calculated_amount_with_tax: basePrice.amount,
+                  original_amount: basePrice.amount,
+                  original_amount_with_tax: basePrice.amount,
+                  currency_code: basePrice.currency_code || 'IRR'
+                }
+              }
+            }
+          })
+        )
+
+        const seller = productIdToSeller[product.id] || null
+        return { ...product, seller, variants: variantsWithPrices }
+      })
+    )
 
     const getMinPrice = (p: any) => {
       if (!p.variants?.length) return Infinity
       return Math.min(
-        ...p.variants.map((v: any) => v.calculated_price?.calculated_amount ?? Infinity)
+        ...p.variants.map(
+          (v: any) => v.calculated_price?.calculated_amount ?? Infinity
+        )
       )
     }
 
     let sortedProducts = transformedProducts
     if (sort_by === 'title') {
-      sortedProducts = [...transformedProducts].sort((a: any, b: any) => a.title.localeCompare(b.title))
+      sortedProducts = [...transformedProducts].sort((a: any, b: any) =>
+        a.title.localeCompare(b.title)
+      )
     } else if (sort_by === 'created_at') {
-      sortedProducts = [...transformedProducts].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      sortedProducts = [...transformedProducts].sort(
+        (a: any, b: any) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
     } else if (sort_by === 'price_asc') {
-      sortedProducts = [...transformedProducts].sort((a: any, b: any) => getMinPrice(a) - getMinPrice(b))
+      sortedProducts = [...transformedProducts].sort(
+        (a: any, b: any) => getMinPrice(a) - getMinPrice(b)
+      )
     } else if (sort_by === 'price_desc') {
-      sortedProducts = [...transformedProducts].sort((a: any, b: any) => getMinPrice(b) - getMinPrice(a))
+      sortedProducts = [...transformedProducts].sort(
+        (a: any, b: any) => getMinPrice(b) - getMinPrice(a)
+      )
     } else {
       sortedProducts = [...transformedProducts].sort(() => Math.random() - 0.5)
     }
@@ -268,20 +415,20 @@ export const GET = async (
 
     const locale = req.headers['x-locale'] as string | undefined
     if (locale && shouldTranslate(locale)) {
-      const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
+      const translationsService = req.scope.resolve(
+        TRANSLATIONS_MODULE
+      ) as TranslationsModuleService
       const translationMap = await translationsService.getMapForLocale(locale)
-      sortedProducts = applyTranslations(
-        sortedProducts,
-        translationMap,
-        ['title', 'description', 'name']
-      ) as typeof sortedProducts
+      sortedProducts = applyTranslations(sortedProducts, translationMap, [
+        'title',
+        'description',
+        'name'
+      ]) as typeof sortedProducts
       for (const p of sortedProducts) {
         if (p.categories?.length) {
-          p.categories = applyTranslations(
-            p.categories,
-            translationMap,
-            ['name']
-          ) as typeof p.categories
+          p.categories = applyTranslations(p.categories, translationMap, [
+            'name'
+          ]) as typeof p.categories
         }
       }
       if (facets?.categories?.length) {
@@ -292,11 +439,9 @@ export const GET = async (
         ) as typeof facets.categories
       }
       if (facets?.brands?.length) {
-        facets.brands = applyTranslations(
-          facets.brands,
-          translationMap,
-          ['name']
-        ) as typeof facets.brands
+        facets.brands = applyTranslations(facets.brands, translationMap, [
+          'name'
+        ]) as typeof facets.brands
       }
     }
 

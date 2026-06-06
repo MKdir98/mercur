@@ -1,14 +1,22 @@
-import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
-import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
-import { TRANSLATIONS_MODULE, TranslationsModuleService } from '@mercurjs/translations'
 import { z } from 'zod'
 
-import { applyTranslations, shouldTranslate } from '../../../shared/utils/apply-translations'
+import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
+import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
+
+import {
+  TRANSLATIONS_MODULE,
+  TranslationsModuleService
+} from '@mercurjs/translations'
+
+import {
+  applyTranslations,
+  shouldTranslate
+} from '../../../shared/utils/apply-translations'
 
 const BrandsQuerySchema = z.object({
   limit: z.coerce.number().optional().default(50),
   offset: z.coerce.number().optional().default(0),
-  q: z.string().optional(),
+  q: z.string().optional()
 })
 
 type BrandsQueryType = z.infer<typeof BrandsQuerySchema>
@@ -18,7 +26,7 @@ export const GET = async (
   res: MedusaResponse
 ) => {
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
-  
+
   try {
     const validatedQuery = BrandsQuerySchema.parse(req.query)
     const { limit, offset, q } = validatedQuery
@@ -58,13 +66,21 @@ export const GET = async (
     })
 
     let transformedBrands = sellers.map((seller: any) => {
-      const ownerMember = Array.isArray(seller.members) ? seller.members.find((m: any) => m?.role === 'owner') || seller.members[0] : null
+      const ownerMember = Array.isArray(seller.members)
+        ? seller.members.find((m: any) => m?.role === 'owner') ||
+          seller.members[0]
+        : null
       const logo = seller.photo || ownerMember?.photo || null
       const description = seller.description || ownerMember?.bio || null
       return {
         id: seller.id,
         name: seller.name,
-        handle: seller.handle || seller.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+        handle:
+          seller.handle ||
+          seller.name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, ''),
         logo,
         description,
         created_at: seller.created_at,
@@ -74,13 +90,14 @@ export const GET = async (
 
     const locale = req.headers['x-locale'] as string | undefined
     if (locale && shouldTranslate(locale)) {
-      const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
+      const translationsService = req.scope.resolve(
+        TRANSLATIONS_MODULE
+      ) as TranslationsModuleService
       const translationMap = await translationsService.getMapForLocale(locale)
-      transformedBrands = applyTranslations(
-        transformedBrands,
-        translationMap,
-        ['name', 'description']
-      ) as typeof transformedBrands
+      transformedBrands = applyTranslations(transformedBrands, translationMap, [
+        'name',
+        'description'
+      ]) as typeof transformedBrands
     }
 
     res.json({
@@ -89,7 +106,6 @@ export const GET = async (
       limit,
       offset
     })
-
   } catch (error) {
     console.error('Error fetching brands (sellers):', error)
     res.status(500).json({
@@ -105,4 +121,3 @@ export const GET = async (
 export const OPTIONS = async (req: MedusaRequest, res: MedusaResponse) => {
   res.status(204).send()
 }
-

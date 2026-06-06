@@ -653,7 +653,11 @@ class PostexService extends AbstractFulfillmentProviderService {
         receiver: requestData.receiver.name
       })
 
-      const result = await postexClient.createBulkParcels(requestData)
+      const result = await postexClient.createBulkParcels({
+        ...requestData,
+        name: orderId,
+        lead_time: 2
+      })
 
       if (!result) {
         throw new Error('خطا در ثبت مرسوله پستکس: پاسخی از سرور دریافت نشد')

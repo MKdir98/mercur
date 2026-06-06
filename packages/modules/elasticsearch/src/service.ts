@@ -78,7 +78,6 @@ export interface SearchResults {
 export class ElasticsearchModuleService {
   private client: Client
   private productIndex = 'products'
-  private reviewIndex = 'reviews'
 
   constructor(options: ModuleOptions) {
     this.client = new Client({
@@ -118,7 +117,7 @@ export class ElasticsearchModuleService {
     }
   }
 
-  async batchIndexProducts(products: ElasticsearchProduct[]) {
+  async batchIndexProducts(products: ElasticsearchProduct[]): Promise<void> {
     try {
       const body = products.flatMap(product => [
         { index: { _index: this.productIndex, _id: product.id } },
@@ -133,8 +132,6 @@ export class ElasticsearchModuleService {
       if (response.errors) {
         console.error('Bulk indexing errors:', response.items)
       }
-
-      return response
     } catch (error) {
       console.error('Error batch indexing products:', error)
       throw error
@@ -405,19 +402,19 @@ export class ElasticsearchModuleService {
       })
 
       // Process results
-      const products = searchResponse.body.hits.hits.map((hit: any) => ({
+      const products = (searchResponse as any).hits.hits.map((hit: any) => ({
         ...hit._source,
         _score: hit._score
       }))
 
       // Process facets
-      const facets = this.processFacets(searchResponse.body.aggregations)
+      const facets = this.processFacets((searchResponse as any).aggregations)
 
       return {
         products,
         facets,
-        total: searchResponse.body.hits.total.value,
-        processing_time: searchResponse.body.took
+        total: (searchResponse as any).hits.total.value,
+        processing_time: (searchResponse as any).took
       }
 
     } catch (error) {
@@ -487,6 +484,8 @@ export class ElasticsearchModuleService {
     }
   }
 }
+
+export default ElasticsearchModuleService
 
 // Default Elasticsearch mapping for products
 export const defaultProductMapping = {

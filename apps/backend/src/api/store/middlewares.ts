@@ -1,6 +1,11 @@
 import { MiddlewareRoute, authenticate } from '@medusajs/framework'
-import type { MedusaNextFunction, MedusaRequest, MedusaResponse } from '@medusajs/framework'
+import type {
+  MedusaNextFunction,
+  MedusaRequest,
+  MedusaResponse
+} from '@medusajs/framework'
 
+import { createListingCacheMiddleware } from '../../shared/infra/http/middlewares/listing-cache'
 import { resolveCustomTokenAuth } from '../../shared/infra/http/middlewares/resolve-custom-token-auth'
 import { storeCartsMiddlewares } from './carts/middlewares'
 import { storeOrderSetMiddlewares } from './order-set/middlewares'
@@ -17,13 +22,14 @@ const bypassAuthInLocalDemo = async (
   res: MedusaResponse,
   next: MedusaNextFunction
 ) => {
-  const isLocal = process.env.APP_ENV === 'local' || process.env.APP_ENV === 'demo'
-  
+  const isLocal =
+    process.env.APP_ENV === 'local' || process.env.APP_ENV === 'demo'
+
   if (isLocal) {
     // در local/demo، publishable key رو bypass می‌کنیم
     return next()
   }
-  
+
   // در production، authentication لازمه (ولی برای auth endpoints نباید authenticate بخوایم)
   return next()
 }
@@ -33,8 +39,10 @@ const IRAN_VAT_RATE = 0
 const toNumber = (val: any): number => {
   if (val == null) return 0
   if (typeof val === 'number') return val
-  if (typeof val === 'object' && 'numeric_' in val) return (val as any).numeric_ ?? 0
-  if (typeof val === 'object' && 'toNumber' in val) return (val as any).toNumber()
+  if (typeof val === 'object' && 'numeric_' in val)
+    return (val as any).numeric_ ?? 0
+  if (typeof val === 'object' && 'toNumber' in val)
+    return (val as any).toNumber()
   return Number(val) || 0
 }
 
@@ -95,7 +103,7 @@ export const storeMiddlewares: MiddlewareRoute[] = [
   // Public endpoints - بدون نیاز به authentication
   {
     matcher: '/store/brands',
-    middlewares: [bypassAuthInLocalDemo]
+    middlewares: [bypassAuthInLocalDemo, createListingCacheMiddleware(1800)]
   },
   {
     matcher: '/store/seller*',
@@ -103,7 +111,7 @@ export const storeMiddlewares: MiddlewareRoute[] = [
   },
   {
     matcher: '/store/popular-products',
-    middlewares: [bypassAuthInLocalDemo]
+    middlewares: [bypassAuthInLocalDemo, createListingCacheMiddleware(600)]
   },
   {
     matcher: '/store/featured-sellers',
@@ -111,11 +119,11 @@ export const storeMiddlewares: MiddlewareRoute[] = [
   },
   {
     matcher: '/store/rich-products',
-    middlewares: [bypassAuthInLocalDemo]
+    middlewares: [bypassAuthInLocalDemo, createListingCacheMiddleware(600)]
   },
   {
     matcher: '/store/product-categories',
-    middlewares: [bypassAuthInLocalDemo]
+    middlewares: [bypassAuthInLocalDemo, createListingCacheMiddleware(1800)]
   },
   {
     matcher: '/store/homepage-media',

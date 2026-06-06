@@ -1,10 +1,11 @@
 import { defineConfig, loadEnv } from '@medusajs/framework/utils'
 
-import { buildDomesticIranPaymentProviders } from './src/lib/build-domestic-iran-payment-providers'
 import { IRAN_BANKTEST_SEP_CREDENTIALS } from '@mercurjs/framework'
+
+import { buildDomesticIranPaymentProviders } from './src/lib/build-domestic-iran-payment-providers'
 import {
   effectiveSepSandbox,
-  effectiveZarinpalSandbox,
+  effectiveZarinpalSandbox
 } from './src/lib/iran-payment-sandbox'
 
 loadEnv(process.env.NODE_ENV || 'development', process.cwd())
@@ -52,9 +53,9 @@ module.exports = defineConfig({
   admin: {
     vite: () => ({
       server: {
-        allowedHosts: true,
-      },
-    }),
+        allowedHosts: true
+      }
+    })
   },
   modules: [
     { resolve: '@mercurjs/service-log' },
@@ -74,17 +75,19 @@ module.exports = defineConfig({
       resolve: '@mercurjs/zarinpal',
       options: {
         merchantId: process.env.ZARINPAL_MERCHANT_ID,
-        sandbox: effectiveZarinpalSandbox(),
-      },
+        sandbox: effectiveZarinpalSandbox()
+      }
     },
     {
       resolve: '@mercurjs/sep',
       options: {
         terminalId:
           process.env.SEP_TERMINAL_ID ||
-          (effectiveSepSandbox() ? IRAN_BANKTEST_SEP_CREDENTIALS.terminalId : ''),
-        sandbox: effectiveSepSandbox(),
-      },
+          (effectiveSepSandbox()
+            ? IRAN_BANKTEST_SEP_CREDENTIALS.terminalId
+            : ''),
+        sandbox: effectiveSepSandbox()
+      }
     },
     { resolve: '@mercurjs/split-order-payment' },
     { resolve: '@mercurjs/attribute' },
@@ -106,13 +109,14 @@ module.exports = defineConfig({
         webhookSecret: process.env.STRIPE_CONNECTED_ACCOUNTS_WEBHOOK_SECRET
       }
     },
-    {
-      resolve: '@mercurjs/algolia',
-      options: {
-        apiKey: process.env.ALGOLIA_API_KEY,
-        appId: process.env.ALGOLIA_APP_ID
-      }
-    },
+    ...(process.env.ELASTICSEARCH_NODE
+      ? [
+          {
+            resolve: '@mercurjs/elasticsearch',
+            options: { node: process.env.ELASTICSEARCH_NODE }
+          }
+        ]
+      : []),
 
     {
       resolve: '@medusajs/medusa/payment',

@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios'
-import { PostexParcelDetailResponse } from './types'
+
 import { logPostexError, logPostexRequest, logPostexResponse } from './logger'
+import { PostexParcelDetailResponse } from './types'
 
 type ServiceLogEntry = {
   service_name: string
@@ -148,31 +149,78 @@ interface BulkParcelResponse {
   }>
 }
 
+function toShamsiDate(date: Date): string {
+  const gy = date.getFullYear()
+  const gm = date.getMonth() + 1
+  const gd = date.getDate()
+
+  const g_days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  const j_days_in_month = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29]
+
+  let g_day_no =
+    365 * (gy - 1600) +
+    Math.floor((gy - 1600 + 3) / 4) -
+    Math.floor((gy - 1600 + 99) / 100) +
+    Math.floor((gy - 1600 + 399) / 400)
+
+  for (let i = 0; i < gm - 1; i++) g_day_no += g_days_in_month[i]
+  if (gm > 2 && ((gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0)) g_day_no++
+  g_day_no += gd - 1
+
+  let j_day_no = g_day_no - 79
+  const j_np = Math.floor(j_day_no / 12053)
+  j_day_no %= 12053
+
+  let jy = 979 + 33 * j_np + 4 * Math.floor(j_day_no / 1461)
+  j_day_no %= 1461
+
+  if (j_day_no >= 366) {
+    jy += Math.floor((j_day_no - 1) / 365)
+    j_day_no = (j_day_no - 1) % 365
+  }
+
+  let jm = 0
+  for (; jm < 11 && j_day_no >= j_days_in_month[jm]; jm++) {
+    j_day_no -= j_days_in_month[jm]
+  }
+
+  return `${jy}/${String(jm + 1).padStart(2, '0')}/${String(j_day_no + 1).padStart(2, '0')}`
+}
+
 export class PostexClient {
   private client: AxiosInstance
   private options: PostexOptions
 
   constructor(options: PostexOptions) {
     this.options = options
-    
+
     const baseURL = options.apiUrl || 'https://api.postex.ir'
-    
-    console.log('🔑 [POSTEX CLIENT] API Key configured:', options.apiKey ? `${options.apiKey.substring(0, 15)}...` : 'NOT SET')
-    
+
+    console.log(
+      '🔑 [POSTEX CLIENT] API Key configured:',
+      options.apiKey ? `${options.apiKey.substring(0, 15)}...` : 'NOT SET'
+    )
+
     this.client = axios.create({
       baseURL,
       headers: {
         'Content-Type': 'application/json',
-        ...(options.apiKey && { 
-          'Authorization': `Bearer ${options.apiKey}`,
+        ...(options.apiKey && {
+          Authorization: `Bearer ${options.apiKey}`,
           'Api-Key': options.apiKey,
           'X-API-Key': options.apiKey
         })
       }
     })
-    
-    console.log('🔑 [POSTEX CLIENT] Authorization header:', this.client.defaults.headers['Authorization'])
-    console.log('🔑 [POSTEX CLIENT] Api-Key header:', this.client.defaults.headers['Api-Key'])
+
+    console.log(
+      '🔑 [POSTEX CLIENT] Authorization header:',
+      this.client.defaults.headers['Authorization']
+    )
+    console.log(
+      '🔑 [POSTEX CLIENT] Api-Key header:',
+      this.client.defaults.headers['Api-Key']
+    )
   }
 
   getDefaultParcel() {
@@ -211,7 +259,7 @@ export class PostexClient {
           courier_code: '',
           service_type: 'EXPRESS'
         },
-        parcels: params.parcels.map(parcel => ({
+        parcels: params.parcels.map((parcel) => ({
           custom_parcel_id: '',
           to_city_code: params.to_city_code,
           payment_type: 'SENDER',
@@ -234,9 +282,14 @@ export class PostexClient {
       logPostexRequest(endpoint, requestBody)
 
       const start = Date.now()
-      let response: Awaited<ReturnType<typeof this.client.post<ShippingQuoteResponse>>>
+      let response: Awaited<
+        ReturnType<typeof this.client.post<ShippingQuoteResponse>>
+      >
       try {
-        response = await this.client.post<ShippingQuoteResponse>(endpoint, requestBody)
+        response = await this.client.post<ShippingQuoteResponse>(
+          endpoint,
+          requestBody
+        )
         await this.options.logFn?.({
           service_name: 'postex',
           action: 'calculateRates',
@@ -244,7 +297,7 @@ export class PostexClient {
           status: 'success',
           request_data: requestBody as unknown as Record<string, unknown>,
           response_data: response.data as unknown as Record<string, unknown>,
-          duration_ms: Date.now() - start,
+          duration_ms: Date.now() - start
         })
       } catch (httpError) {
         await this.options.logFn?.({
@@ -254,7 +307,7 @@ export class PostexClient {
           status: 'error',
           request_data: requestBody as unknown as Record<string, unknown>,
           duration_ms: Date.now() - start,
-          error_message: httpError.response?.data?.message ?? httpError.message,
+          error_message: httpError.response?.data?.message ?? httpError.message
         })
         throw httpError
       }
@@ -262,24 +315,30 @@ export class PostexClient {
       logPostexResponse(endpoint, response.data)
 
       if (response.data?.shipping_prices?.[0]?.service_price?.[0]?.totalPrice) {
-        const price = response.data.shipping_prices[0].service_price[0].totalPrice
+        const price =
+          response.data.shipping_prices[0].service_price[0].totalPrice
         console.log('✅ [POSTEX CLIENT] Found price from service_price:', price)
         return { price }
       }
 
       if (response.data?.shipping_price) {
-        console.log('✅ [POSTEX CLIENT] Found price from shipping_price:', response.data.shipping_price)
+        console.log(
+          '✅ [POSTEX CLIENT] Found price from shipping_price:',
+          response.data.shipping_price
+        )
         return { price: response.data.shipping_price }
       }
 
       if (response.data?.total_cost) {
-        console.log('✅ [POSTEX CLIENT] Found price from total_cost:', response.data.total_cost)
+        console.log(
+          '✅ [POSTEX CLIENT] Found price from total_cost:',
+          response.data.total_cost
+        )
         return { price: response.data.total_cost }
       }
 
       console.warn('⚠️  [POSTEX CLIENT] No price in response')
       return null
-
     } catch (error) {
       logPostexError('/api/v1/shipping/quotes', {
         status: error.response?.status,
@@ -314,6 +373,8 @@ export class PostexClient {
       total_value: number
     }>
     collection_type?: string
+    name?: string
+    lead_time?: number
   }): Promise<{
     tracking_code: string
     parcel_id: string
@@ -326,46 +387,51 @@ export class PostexClient {
           pick_up_price: 0,
           shipping_price: 485936,
           total_price: 485936,
-          result: [{
-            isSuccess: true,
-            data: {
-              sequence_number: 1,
-              parcel_no: 1613499993813,
-              custom_order_no: null,
-              custom_reference_no: null,
-              is_oversized: false,
-              shipments: [{
-                step: 1,
-                courier: {
-                  paymentType: null,
-                  paymentName: null,
-                  courierServiceName: null,
-                  courierCode: null,
-                  courierName: 'IR_POST',
-                  courierServiceCode: 'EXPRESS',
-                  days: null,
-                  slaHours: 0
-                },
-                tracking: {
-                  barcode: '210160434305978670000147',
-                  tracking_number: '210160434305978670000147',
-                  tracking_url: 'https://postex.ir/service/rahgiri?barcode=**********'
-                },
-                shipping_rate: {
-                  currency: 'IRR',
-                  discount: 60874,
-                  vat: 0,
-                  amount: 395736,
-                  vas_amount: 90200,
-                  total_amount: 485936,
-                  pre_discount_amount: 546810
-                },
-                is_duplicated: false,
-                created_at: '2026-02-26T15:38:58.8385212+03:30'
-              }],
-              order_id: 707075
+          result: [
+            {
+              isSuccess: true,
+              data: {
+                sequence_number: 1,
+                parcel_no: 1613499993813,
+                custom_order_no: null,
+                custom_reference_no: null,
+                is_oversized: false,
+                shipments: [
+                  {
+                    step: 1,
+                    courier: {
+                      paymentType: null,
+                      paymentName: null,
+                      courierServiceName: null,
+                      courierCode: null,
+                      courierName: 'IR_POST',
+                      courierServiceCode: 'EXPRESS',
+                      days: null,
+                      slaHours: 0
+                    },
+                    tracking: {
+                      barcode: '210160434305978670000147',
+                      tracking_number: '210160434305978670000147',
+                      tracking_url:
+                        'https://postex.ir/service/rahgiri?barcode=**********'
+                    },
+                    shipping_rate: {
+                      currency: 'IRR',
+                      discount: 60874,
+                      vat: 0,
+                      amount: 395736,
+                      vas_amount: 90200,
+                      total_amount: 485936,
+                      pre_discount_amount: 546810
+                    },
+                    is_duplicated: false,
+                    created_at: '2026-02-26T15:38:58.8385212+03:30'
+                  }
+                ],
+                order_id: 707075
+              }
             }
-          }],
+          ],
           jobID: null,
           createdAt: null
         }
@@ -379,7 +445,7 @@ export class PostexClient {
           status: 'success',
           request_data: params as unknown as Record<string, unknown>,
           response_data: mockResponse as unknown as Record<string, unknown>,
-          duration_ms: 0,
+          duration_ms: 0
         })
         const result = mockResponse.result[0]
         const parcelNo = result.data.parcel_no
@@ -395,16 +461,22 @@ export class PostexClient {
         throw new Error('API key is required')
       }
 
-      const [senderFirstName, ...senderLastNameParts] = params.sender.name.split(' ')
+      const [senderFirstName, ...senderLastNameParts] =
+        params.sender.name.split(' ')
       const senderLastName = senderLastNameParts.join(' ') || senderFirstName
 
-      const [receiverFirstName, ...receiverLastNameParts] = params.receiver.name.split(' ')
-      const receiverLastName = receiverLastNameParts.join(' ') || receiverFirstName
+      const [receiverFirstName, ...receiverLastNameParts] =
+        params.receiver.name.split(' ')
+      const receiverLastName =
+        receiverLastNameParts.join(' ') || receiverFirstName
 
       const collectionType = params.collection_type || 'pick_up'
-      const requestBody = {
+      const requestBody: Record<string, unknown> = {
         collection_type: collectionType,
-        parcels: params.parcels.map(parcel => ({
+        pickup_on_utc: toShamsiDate(new Date()),
+        ...(params.name && { name: params.name }),
+        ...(params.lead_time !== undefined && { lead_time: params.lead_time }),
+        parcels: params.parcels.map((parcel) => ({
           courier: {
             name: 'IR_POST',
             payment_type: 'SENDER',
@@ -475,9 +547,14 @@ export class PostexClient {
       logPostexRequest(endpoint, requestBody)
 
       const bulkStart = Date.now()
-      let response: Awaited<ReturnType<typeof this.client.post<BulkParcelResponse>>>
+      let response: Awaited<
+        ReturnType<typeof this.client.post<BulkParcelResponse>>
+      >
       try {
-        response = await this.client.post<BulkParcelResponse>(endpoint, requestBody)
+        response = await this.client.post<BulkParcelResponse>(
+          endpoint,
+          requestBody
+        )
         await this.options.logFn?.({
           service_name: 'postex',
           action: 'createBulkParcels',
@@ -485,7 +562,7 @@ export class PostexClient {
           status: 'success',
           request_data: requestBody as unknown as Record<string, unknown>,
           response_data: response.data as unknown as Record<string, unknown>,
-          duration_ms: Date.now() - bulkStart,
+          duration_ms: Date.now() - bulkStart
         })
       } catch (httpError) {
         await this.options.logFn?.({
@@ -495,7 +572,7 @@ export class PostexClient {
           status: 'error',
           request_data: requestBody as unknown as Record<string, unknown>,
           duration_ms: Date.now() - bulkStart,
-          error_message: httpError.response?.data?.message ?? httpError.message,
+          error_message: httpError.response?.data?.message ?? httpError.message
         })
         throw httpError
       }
@@ -504,27 +581,30 @@ export class PostexClient {
 
       if (response.data?.result?.[0]) {
         const result = response.data.result[0]
-        
+
         if (!result.isSuccess) {
           const errorMessage = result.message || 'Unknown error'
-          console.error('❌ [POSTEX CLIENT] Parcel creation error:', errorMessage)
+          console.error(
+            '❌ [POSTEX CLIENT] Parcel creation error:',
+            errorMessage
+          )
           throw new Error(`Postex error: ${errorMessage}`)
         }
 
         if (result.data) {
           const parcelNo = result.data.parcel_no
           const tracking = result.data.shipments?.[0]?.tracking
-          
+
           if (tracking && parcelNo) {
             const trackingCode = tracking.tracking_number || tracking.barcode
-            
+
             if (trackingCode) {
               console.log('✅ [POSTEX CLIENT] Parcel created successfully:', {
                 tracking_code: trackingCode,
                 parcel_id: parcelNo,
                 tracking_url: tracking.tracking_url
               })
-              
+
               return {
                 tracking_code: trackingCode,
                 parcel_id: parcelNo.toString()
@@ -535,9 +615,11 @@ export class PostexClient {
       }
 
       console.warn('⚠️  [POSTEX CLIENT] No tracking code in response')
-      console.warn('⚠️  [POSTEX CLIENT] Response data:', JSON.stringify(response.data, null, 2))
+      console.warn(
+        '⚠️  [POSTEX CLIENT] Response data:',
+        JSON.stringify(response.data, null, 2)
+      )
       throw new Error('Postex did not return tracking information')
-
     } catch (error) {
       logPostexError('/api/v1/parcels/bulk', {
         status: error.response?.status,
@@ -554,10 +636,14 @@ export class PostexClient {
     try {
       const isProduction = process.env.NODE_ENV === 'production'
       if (!isProduction) {
-        const mockPdfBase64 = 'JVBERi0xLjQKMSAwIG9iCjw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYm9iCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSA+PgplbmRvYm8KdHJhaWxlcgo8PCAvU2l6ZSA0IC9Sb290IDEgMCA+PgpxdWFkegp4cmVmCjAgNAowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAwIG4gCjAwMDAwMDAwOTcgMDAwMDAwIG4gCjAwMDAwMDAxNTYgMDAwMDAwIG4gCg=='
+        const mockPdfBase64 =
+          'JVBERi0xLjQKMSAwIG9iCjw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYm9iCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSA+PgplbmRvYm8KdHJhaWxlcgo8PCAvU2l6ZSA0IC9Sb290IDEgMCA+PgpxdWFkegp4cmVmCjAgNAowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAwIG4gCjAwMDAwMDAwOTcgMDAwMDAwIG4gCjAwMDAwMDAxNTYgMDAwMDAwIG4gCg=='
         const mockPdfBuffer = Buffer.from(mockPdfBase64, 'base64')
         logPostexRequest(endpoint, { parcelNo, mock: true })
-        logPostexResponse(endpoint, { byteLength: mockPdfBuffer.byteLength, mock: true })
+        logPostexResponse(endpoint, {
+          byteLength: mockPdfBuffer.byteLength,
+          mock: true
+        })
         return new Uint8Array(mockPdfBuffer).buffer
       }
 
@@ -570,7 +656,9 @@ export class PostexClient {
       const labelStart = Date.now()
       let labelData: ArrayBuffer | undefined
       try {
-        const res = await this.client.get<ArrayBuffer>(endpoint, { responseType: 'arraybuffer' })
+        const res = await this.client.get<ArrayBuffer>(endpoint, {
+          responseType: 'arraybuffer'
+        })
         labelData = res.data
         await this.options.logFn?.({
           service_name: 'postex',
@@ -579,7 +667,7 @@ export class PostexClient {
           status: 'success',
           request_data: { parcel_no: parcelNo },
           response_data: { byte_length: labelData?.byteLength },
-          duration_ms: Date.now() - labelStart,
+          duration_ms: Date.now() - labelStart
         })
       } catch (httpError) {
         await this.options.logFn?.({
@@ -589,7 +677,7 @@ export class PostexClient {
           status: 'error',
           request_data: { parcel_no: parcelNo },
           duration_ms: Date.now() - labelStart,
-          error_message: httpError.response?.data?.message ?? httpError.message,
+          error_message: httpError.response?.data?.message ?? httpError.message
         })
         throw httpError
       }
@@ -611,7 +699,9 @@ export class PostexClient {
     }
   }
 
-  async getParcelDetail(parcelId: string): Promise<PostexParcelDetailResponse | null> {
+  async getParcelDetail(
+    parcelId: string
+  ): Promise<PostexParcelDetailResponse | null> {
     const endpoint = `/api/v1/parcels/${parcelId}`
     if (!this.options.apiKey) {
       throw new Error('API key is required')
@@ -621,7 +711,8 @@ export class PostexClient {
 
     const detailStart = Date.now()
     try {
-      const response = await this.client.get<PostexParcelDetailResponse>(endpoint)
+      const response =
+        await this.client.get<PostexParcelDetailResponse>(endpoint)
       await this.options.logFn?.({
         service_name: 'postex',
         action: 'getParcelDetail',
@@ -629,7 +720,7 @@ export class PostexClient {
         status: 'success',
         request_data: { parcel_id: parcelId },
         response_data: response.data as unknown as Record<string, unknown>,
-        duration_ms: Date.now() - detailStart,
+        duration_ms: Date.now() - detailStart
       })
       logPostexResponse(endpoint, response.data)
       return response.data
@@ -641,7 +732,7 @@ export class PostexClient {
         status: 'error',
         request_data: { parcel_id: parcelId },
         duration_ms: Date.now() - detailStart,
-        error_message: error.response?.data?.message ?? error.message,
+        error_message: error.response?.data?.message ?? error.message
       })
       logPostexError(endpoint, {
         status: error.response?.status,
@@ -652,4 +743,3 @@ export class PostexClient {
     }
   }
 }
-
