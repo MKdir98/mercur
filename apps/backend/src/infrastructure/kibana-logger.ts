@@ -13,7 +13,7 @@ const API_REQUESTS_INDEX =
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 export interface AppLogEntry {
   level: LogLevel
@@ -114,7 +114,7 @@ function getKibanaClient(): Client {
     kibanaClient = new Client({
       node: process.env.KIBANA_ES_NODE || 'http://localhost:9200',
       maxRetries: 3,
-      requestTimeout: 5000,
+      requestTimeout: 5000
     })
   }
   return kibanaClient
@@ -191,7 +191,7 @@ export const kibanaLogger = {
 // ── Index template setup ─────────────────────────────────────────────────────
 
 export async function ensureKibanaIndexTemplates(): Promise<void> {
-  const client = getElasticsearchClient()
+  const client = getKibanaClient()
 
   const templates = [
     {
