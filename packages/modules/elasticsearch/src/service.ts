@@ -79,7 +79,10 @@ export class ElasticsearchModuleService {
   private client: Client
   private productIndex = 'products'
 
-  constructor(options: ModuleOptions) {
+  constructor(
+    _container: Record<string, unknown>,
+    options: ModuleOptions
+  ) {
     this.client = new Client({
       node: options.node,
       auth: options.auth
