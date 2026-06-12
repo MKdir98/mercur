@@ -26,7 +26,7 @@ function getPostexFlatShippingAmountRial(): number | null {
 }
 
 async function sendTrackingCodeSms(order: any, trackingCode: string | null) {
-  const templateId = process.env.SMS_IR_POSTEX_TRACKING_TEMPLATE_ID
+  const templateId = process.env.SMS_IR_DELIVERING_TEMPLATE_ID
   if (!templateId || !trackingCode) return
 
   const phone = order?.customer?.phone
