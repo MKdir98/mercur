@@ -7,6 +7,7 @@ import {
 import { logExternalServiceCall } from '@mercurjs/framework'
 
 import { PostexClient } from '../../integrations/postex/client'
+import { createSmsService } from '../../lib/sms/sms-ir.service'
 
 function getPostexFlatShippingAmountRial(): number | null {
   const raw = process.env.POSTEX_FLAT_SHIPPING_AMOUNT_RIAL
@@ -22,6 +23,32 @@ function getPostexFlatShippingAmountRial(): number | null {
     return null
   }
   return Math.round(n)
+}
+
+async function sendTrackingCodeSms(order: any, trackingCode: string | null) {
+  const templateId = process.env.SMS_IR_POSTEX_TRACKING_TEMPLATE_ID
+  if (!templateId || !trackingCode) return
+
+  const phone = order?.customer?.phone
+  if (!phone) return
+
+  const NAME =
+    `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim()
+
+  const smsService = createSmsService()
+  const result = await smsService.sendTemplate(phone, templateId, {
+    NAME,
+    tracking_code: trackingCode
+  })
+
+  if (!result.success) {
+    console.error(
+      `❌ [POSTEX SERVICE] Failed to send tracking SMS to ${phone}:`,
+      result.error
+    )
+  } else {
+    console.log(`✅ [POSTEX SERVICE] Sent tracking code SMS to ${phone}`)
+  }
 }
 
 class PostexService extends AbstractFulfillmentProviderService {
@@ -318,7 +345,10 @@ class PostexService extends AbstractFulfillmentProviderService {
           'items.unit_price',
           'items.quantity',
           'shipping_methods.*',
-          'shipping_methods.shipping_option_id'
+          'shipping_methods.shipping_option_id',
+          'customer.phone',
+          'customer.first_name',
+          'customer.last_name'
         ],
         filters: {
           id: orderId
@@ -696,6 +726,8 @@ class PostexService extends AbstractFulfillmentProviderService {
         tracking_code: result.tracking_code,
         parcel_id: result.parcel_id
       })
+
+      await sendTrackingCodeSms(order, result.tracking_code)
 
       return {
         tracking_number: result.tracking_code,

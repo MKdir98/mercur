@@ -5,7 +5,6 @@ import {
 } from '@medusajs/framework/utils'
 
 import { createSmsService } from '../lib/sms/sms-ir.service'
-import { orderCode } from '../shared/utils'
 
 export default async function smsBuyerNewOrderHandler({
   event,
@@ -19,20 +18,23 @@ export default async function smsBuyerNewOrderHandler({
     data: [order]
   } = await query.graph({
     entity: 'order',
-    fields: ['id', 'display_id', 'customer.phone'],
+    fields: [
+      'id',
+      'customer.phone',
+      'customer.first_name',
+      'customer.last_name'
+    ],
     filters: { id: event.data.id }
   })
 
   const phone = order?.customer?.phone
   if (!phone) return
 
+  const NAME =
+    `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim()
+
   const smsService = createSmsService()
-  const result = await smsService.sendTemplate(phone, templateId, {
-    order_id: (() => {
-      const displayId = (order as { display_id?: number }).display_id
-      return displayId ? orderCode(displayId) : order.id
-    })()
-  })
+  const result = await smsService.sendTemplate(phone, templateId, { NAME })
 
   if (!result.success) {
     console.error(
