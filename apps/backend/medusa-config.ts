@@ -4,6 +4,7 @@ import { IRAN_BANKTEST_SEP_CREDENTIALS } from '@mercurjs/framework'
 
 import { buildDomesticIranPaymentProviders } from './src/lib/build-domestic-iran-payment-providers'
 import {
+  effectiveRemitationSandbox,
   effectiveSepSandbox,
   effectiveZarinpalSandbox
 } from './src/lib/iran-payment-sandbox'
@@ -31,7 +32,8 @@ const domesticPaymentProviders = useRemitationPaymentGateway
           currency: process.env.REMITATION_PAYMENT_CURRENCY || 'USD',
           rialPerUsd: process.env.REMITATION_RIAL_PER_USD
             ? parseFloat(process.env.REMITATION_RIAL_PER_USD)
-            : undefined
+            : undefined,
+          sandbox: effectiveRemitationSandbox()
         }
       }
     ]

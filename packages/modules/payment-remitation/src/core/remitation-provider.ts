@@ -42,6 +42,7 @@ export type RemitationOptions = {
   provider: RemitationPaymentProviderName
   currency: RemitationGatewayCurrency
   rialPerUsd?: number
+  sandbox?: boolean
 }
 
 
@@ -369,7 +370,7 @@ abstract class RemitationProvider extends AbstractPaymentProvider<RemitationOpti
     const redirectUrl = `${backendBase}/payment/remitation/callback?cart_id=${encodeURIComponent(cartId)}`
 
     const generateUrl = `${this.resolvedApiRoot()}/plugin/payment-gateway/generate`
-    const requestBody = {
+    const requestBody: Record<string, unknown> = {
       amount: usdAmount,
       currency: this.options_.currency,
       productName: "Order payment",
@@ -377,6 +378,9 @@ abstract class RemitationProvider extends AbstractPaymentProvider<RemitationOpti
       extData: { cart_id: cartId },
       provider: this.options_.provider,
       redirectUrl,
+    }
+    if (this.options_.sandbox) {
+      requestBody.isSandbox = true
     }
     const start = Date.now()
 

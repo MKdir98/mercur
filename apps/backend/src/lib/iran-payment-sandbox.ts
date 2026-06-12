@@ -13,3 +13,7 @@ export function effectiveSepSandbox(): boolean {
 export function effectiveParsianSandbox(): boolean {
   return iranPaymentUseSandbox() || process.env.PARSIAN_SANDBOX === 'true'
 }
+
+export function effectiveRemitationSandbox(): boolean {
+  return iranPaymentUseSandbox() || process.env.REMITATION_SANDBOX === 'true'
+}
