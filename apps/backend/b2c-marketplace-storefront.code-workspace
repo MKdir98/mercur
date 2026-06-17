@@ -10,5 +10,14 @@
 			"path": "../../../vendor-panel"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"jest.jestCommandLine": "node --experimental-vm-modules /home/mehdi/all/repositories/github.com/doorfestival/mercur/apps/backend/node_modules/.bin/jest --forceExit",
+		"jest.rootPath": "/home/mehdi/all/repositories/github.com/doorfestival/mercur/apps/backend",
+		"jest.nodeEnv": {
+			"NODE_OPTIONS": "--experimental-vm-modules",
+			"TEST_TYPE": "integration:postex"
+		},
+		"jest.autoRun": "off",
+		"jest.showCoverageOnLoad": false
+	}
 }

@@ -5,6 +5,7 @@ import { createStockLocationsWorkflow } from '@medusajs/medusa/core-flows'
 import { IntermediateEvents } from '@mercurjs/framework'
 import { SELLER_MODULE } from '@mercurjs/seller'
 
+import sellerShippingProfileLink from '../../../links/seller-shipping-profile'
 import sellerStockLocationLink from '../../../links/seller-stock-location'
 import { fetchSellerByAuthActorId } from '../../../shared/infra/http/utils'
 import { updateStockLocationAddressCityIdWorkflow } from '../../../workflows/stock-location/workflows'
@@ -82,6 +83,78 @@ export const POST = async (
     data: { id: result[0].id }
   })
 
+  // Auto-setup PostEx shipping for this location
+  try {
+    const fulfillmentModule = req.scope.resolve(Modules.FULFILLMENT)
+
+    const [fulfillmentSet] = await fulfillmentModule.createFulfillmentSets([
+      {
+        name: `${result[0].name} shipping`,
+        type: 'shipping'
+      }
+    ])
+
+    await remoteLink.create([
+      {
+        [Modules.STOCK_LOCATION]: { stock_location_id: result[0].id },
+        [Modules.FULFILLMENT]: { fulfillment_set_id: fulfillmentSet.id }
+      },
+      {
+        [SELLER_MODULE]: { seller_id: seller.id },
+        [Modules.FULFILLMENT]: { fulfillment_set_id: fulfillmentSet.id }
+      }
+    ])
+
+    const [serviceZone] = await fulfillmentModule.createServiceZones([
+      {
+        name: 'Iran',
+        fulfillment_set_id: fulfillmentSet.id,
+        geo_zones: [{ type: 'country', country_code: 'ir' }]
+      }
+    ])
+
+    const { data: profileLinks } = await query.graph({
+      entity: sellerShippingProfileLink.entryPoint,
+      fields: ['shipping_profile.id'],
+      filters: { seller_id: seller.id }
+    })
+    const shippingProfileId = (profileLinks[0] as any)?.shipping_profile?.id
+
+    if (shippingProfileId) {
+      const [shippingOption] = await fulfillmentModule.createShippingOptions([
+        {
+          name: 'ارسال پستکس',
+          service_zone_id: serviceZone.id,
+          shipping_profile_id: shippingProfileId,
+          provider_id: 'postex',
+          price_type: 'calculated',
+          prices: [],
+          type: {
+            label: 'ارسال پستکس',
+            description: 'ارسال از طریق پستکس',
+            code: 'postex-delivery'
+          }
+        }
+      ])
+
+      await remoteLink.create({
+        [SELLER_MODULE]: { seller_id: seller.id },
+        [Modules.FULFILLMENT]: { shipping_option_id: shippingOption.id }
+      })
+    }
+
+    await remoteLink.create({
+      [Modules.STOCK_LOCATION]: { stock_location_id: result[0].id },
+      [Modules.FULFILLMENT]: { fulfillment_provider_id: 'postex' }
+    })
+  } catch (postexError) {
+    console.error(
+      '⚠️ PostEx auto-setup failed for location:',
+      result[0].id,
+      postexError
+    )
+  }
+
   const {
     data: [stockLocation]
   } = await query.graph({
@@ -95,12 +168,14 @@ export const POST = async (
   const addr = stockLocation.address as Record<string, unknown> | undefined
   if (addr?.city_id) {
     try {
-      const { data: [city] } = await query.graph({
+      const {
+        data: [city]
+      } = await query.graph({
         entity: 'city',
         fields: ['id', 'name', 'state_id', 'state.id', 'state.name'],
         filters: { id: addr.city_id }
       })
-      
+
       if (city) {
         addr.city_details = city
         addr.state_id = (city as { state_id?: string }).state_id
@@ -166,16 +241,18 @@ export const GET = async (
   const stockLocations = await Promise.all(
     sellerLocations.map(async (sellerLocation) => {
       const location = sellerLocation.stock_location
-      
+
       const locAddr = location.address as Record<string, unknown> | undefined
       if (locAddr?.city_id) {
         try {
-          const { data: [city] } = await query.graph({
+          const {
+            data: [city]
+          } = await query.graph({
             entity: 'city',
             fields: ['id', 'name', 'state_id', 'state.id', 'state.name'],
             filters: { id: locAddr.city_id }
           })
-          
+
           if (city) {
             locAddr.city_details = city
             locAddr.state_id = (city as { state_id?: string }).state_id
@@ -184,7 +261,7 @@ export const GET = async (
           console.error('Failed to fetch city details:', error)
         }
       }
-      
+
       return location
     })
   )

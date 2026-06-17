@@ -1,5 +1,6 @@
 import { MedusaContainer } from '@medusajs/framework/types'
 import { ContainerRegistrationKeys, Modules } from '@medusajs/framework/utils'
+import { completeOrderWorkflow } from '@medusajs/medusa/core-flows'
 
 import PostexService from '../modules/postex/service'
 
@@ -92,6 +93,10 @@ export default async function syncPostexStatusJob(container: MedusaContainer) {
             console.log(
               `✅ [POSTEX SYNC] Updated fulfillment ${shipment.fulfillment_id} to delivered`
             )
+            await completeOrderWorkflow(container).run({
+              input: { orderIds: [shipment.order_id] }
+            })
+            console.log(`✅ [POSTEX SYNC] Completed order ${shipment.order_id}`)
           } catch (error) {
             console.error(
               `❌ [POSTEX SYNC] Error updating fulfillment to delivered:`,

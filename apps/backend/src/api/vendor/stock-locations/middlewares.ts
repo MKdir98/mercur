@@ -101,6 +101,21 @@ export const vendorStockLocationsMiddlewares: MiddlewareRoute[] = [
       )
     ]
   },
+  /* PostEx toggle */
+  {
+    method: ['POST', 'DELETE'],
+    matcher: '/vendor/stock-locations/:id/postex',
+    middlewares: [
+      checkResourceOwnershipByResourceId({
+        entryPoint: sellerStockLocationLink.entryPoint,
+        filterField: 'stock_location_id'
+      }),
+      validateAndTransformQuery(
+        VendorGetStockLocationParams,
+        vendorStockLocationQueryConfig.retrieve
+      )
+    ]
+  },
   /* Stock Location Fulfillment Set */
   {
     method: ['POST'],

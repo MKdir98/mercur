@@ -19,6 +19,7 @@
     "resolveJsonModule": true,
     "checkJs": false,
     "strictNullChecks": true,
+    "types": ["jest", "node"],
     "paths": {
       "#/*": ["src/*"]
     }
