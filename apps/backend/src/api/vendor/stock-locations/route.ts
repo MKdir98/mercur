@@ -128,7 +128,6 @@ export const POST = async (
           shipping_profile_id: shippingProfileId,
           provider_id: 'postex',
           price_type: 'calculated',
-          prices: [],
           type: {
             label: 'ارسال پستکس',
             description: 'ارسال از طریق پستکس',
