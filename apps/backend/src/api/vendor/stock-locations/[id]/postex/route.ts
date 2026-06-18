@@ -9,9 +9,11 @@ import { fetchSellerByAuthActorId } from '../../../../../shared/infra/http/utils
 const POSTEX_DEEP_FIELDS = [
   'id',
   'name',
-  '*fulfillment_sets',
-  '*fulfillment_sets.service_zones',
-  '*fulfillment_sets.service_zones.shipping_options'
+  'fulfillment_sets.id',
+  'fulfillment_sets.type',
+  'fulfillment_sets.service_zones.id',
+  'fulfillment_sets.service_zones.shipping_options.id',
+  'fulfillment_sets.service_zones.shipping_options.provider_id'
 ]
 
 export const POST = async (
@@ -38,7 +40,9 @@ export const POST = async (
   // Guard: already active
   const alreadyActive = (location as any).fulfillment_sets?.some((fs: any) =>
     fs.service_zones?.some((sz: any) =>
-      sz.shipping_options?.some((so: any) => so.provider_id?.includes('postex'))
+      sz.shipping_options?.some((so: any) =>
+        so.provider_id?.includes('postex_postex')
+      )
     )
   )
   if (alreadyActive) {
@@ -116,7 +120,7 @@ export const POST = async (
       name: 'ارسال پستکس',
       service_zone_id: serviceZoneId,
       shipping_profile_id: shippingProfileId,
-      provider_id: 'postex',
+      provider_id: 'postex_postex',
       price_type: 'calculated',
       prices: [],
       type: {
@@ -135,7 +139,7 @@ export const POST = async (
   // Ensure PostEx provider is linked
   await remoteLink.create({
     [Modules.STOCK_LOCATION]: { stock_location_id: id },
-    [Modules.FULFILLMENT]: { fulfillment_provider_id: 'postex' }
+    [Modules.FULFILLMENT]: { fulfillment_provider_id: 'postex_postex' }
   })
 
   const {
@@ -168,7 +172,7 @@ export const DELETE = async (
   for (const fs of (location as any).fulfillment_sets ?? []) {
     for (const sz of fs.service_zones ?? []) {
       for (const so of sz.shipping_options ?? []) {
-        if (so.provider_id?.includes('postex')) {
+        if (so.provider_id?.includes('postex_postex')) {
           postexOptionIds.push(so.id)
         }
       }
