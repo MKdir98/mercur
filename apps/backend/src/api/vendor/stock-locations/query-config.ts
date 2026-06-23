@@ -6,6 +6,7 @@ export const vendorStockLocationFields = [
   'address.address_1',
   'address.address_2',
   'address.city',
+  'address.city_id',
   'address.country_code',
   'address.phone',
   'address.province',

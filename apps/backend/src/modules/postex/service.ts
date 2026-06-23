@@ -253,7 +253,7 @@ class PostexService extends AbstractFulfillmentProviderService {
         logFn: (entry) => logExternalServiceCall(this.getDbContainer(), entry)
       })
       const collectionType =
-        optionData.type === 'postex-pickup' ? 'pick_up' : 'courier_drop_off'
+        optionData?.type === 'postex-pickup' ? 'pick_up' : 'courier_drop_off'
       const ratesPayload = {
         from_city_code: originCityCode,
         to_city_code: destinationCityCode,

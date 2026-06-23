@@ -93,6 +93,7 @@ module.exports = defineConfig({
     },
     { resolve: '@mercurjs/split-order-payment' },
     { resolve: '@mercurjs/attribute' },
+    { resolve: '@mercurjs/article' },
     { resolve: '@mercurjs/city' },
     { resolve: '@mercurjs/support-ticket' },
     // TODO: Fix TypeScript errors before enabling
@@ -101,6 +102,21 @@ module.exports = defineConfig({
       resolve: '@mercurjs/taxcode',
       options: {
         apiKey: process.env.STRIPE_SECRET_API_KEY
+      }
+    },
+    {
+      resolve: '@medusajs/medusa/file',
+      options: {
+        providers: [
+          {
+            resolve: '@medusajs/medusa/file-local',
+            id: 'local',
+            options: {
+              upload_dir: 'static',
+              backend_url: `${process.env.BACKEND_URL}/static`
+            }
+          }
+        ]
       }
     },
     { resolve: '@mercurjs/commission' },

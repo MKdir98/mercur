@@ -44,6 +44,7 @@ export const getSellerShippingOptionIdsStep = createStep(
     }
 
     const productIds = cart.items.filter(Boolean).map((i) => i!.product_id)
+    console.log('🔍 [STEP:getSellerShippingOptionIds] productIds:', productIds)
 
     const { data: sellersInCart } = await query.graph({
       entity: sellerProduct.entryPoint,
@@ -52,8 +53,18 @@ export const getSellerShippingOptionIdsStep = createStep(
         product_id: productIds
       }
     })
+    console.log(
+      '🔍 [STEP:getSellerShippingOptionIds] sellersInCart raw:',
+      JSON.stringify(sellersInCart)
+    )
 
-    const uniqueSellersInCart = [...new Set(sellersInCart.map((s) => s.seller_id))]
+    const uniqueSellersInCart = [
+      ...new Set(sellersInCart.map((s) => s.seller_id))
+    ]
+    console.log(
+      '🔍 [STEP:getSellerShippingOptionIds] uniqueSellersInCart:',
+      uniqueSellersInCart
+    )
 
     const { data: sellerShippingOptions } = await query.graph({
       entity: sellerShippingOption.entryPoint,
@@ -62,14 +73,23 @@ export const getSellerShippingOptionIdsStep = createStep(
         seller_id: uniqueSellersInCart
       }
     })
+    console.log(
+      '🔍 [STEP:getSellerShippingOptionIds] sellerShippingOptions raw:',
+      JSON.stringify(sellerShippingOptions)
+    )
 
     const option_ids = sellerShippingOptions.map((so) => so.shipping_option_id)
-    const seller_options: SellerShippingOptionMeta[] = sellerShippingOptions.map(
-      (so) => ({
+    const seller_options: SellerShippingOptionMeta[] =
+      sellerShippingOptions.map((so) => ({
         shipping_option_id: so.shipping_option_id,
         seller_id: so.seller.id,
         seller_name: so.seller.name
-      })
+      }))
+    console.log(
+      '🔍 [STEP:getSellerShippingOptionIds] result → option_ids:',
+      option_ids,
+      'seller_options:',
+      JSON.stringify(seller_options)
     )
 
     return new StepResponse({
@@ -90,20 +110,47 @@ export const filterSellerShippingOptionsStep = createStep(
     },
     { container }
   ) => {
+    console.log(
+      '🔍 [STEP:filterSellerShippingOptions] input.shipping_options count:',
+      input.shipping_options?.length ?? 0
+    )
+    console.log(
+      '🔍 [STEP:filterSellerShippingOptions] input.seller_options:',
+      JSON.stringify(input.seller_options)
+    )
+
     let optionsToUse: ShippingOptionDTO[] = input.shipping_options ?? []
 
     if (!optionsToUse.length && input.seller_options?.length) {
       const query = container.resolve(ContainerRegistrationKeys.QUERY)
       const optionIds = input.seller_options.map((o) => o.shipping_option_id)
+      console.log(
+        '🔍 [STEP:filterSellerShippingOptions] medusa returned 0 — fallback query for optionIds:',
+        optionIds
+      )
       const { data: fallbackOptions } = await query.graph({
         entity: 'shipping_option',
-        fields: ['id', 'name', 'price_type', 'provider_id', '*prices', '*shipping_option_type'],
+        fields: [
+          'id',
+          'name',
+          'price_type',
+          'provider_id',
+          '*prices',
+          '*shipping_option_type'
+        ],
         filters: { id: optionIds }
       })
+      console.log(
+        '🔍 [STEP:filterSellerShippingOptions] fallback results:',
+        JSON.stringify(fallbackOptions)
+      )
       optionsToUse = (fallbackOptions ?? []) as unknown as ShippingOptionDTO[]
     }
 
     if (!optionsToUse.length) {
+      console.log(
+        '🔍 [STEP:filterSellerShippingOptions] FINAL: empty — returning []'
+      )
       return new StepResponse([])
     }
 
@@ -118,6 +165,14 @@ export const filterSellerShippingOptionsStep = createStep(
       }
     })
 
+    console.log(
+      '🔍 [STEP:filterSellerShippingOptions] FINAL options:',
+      optionsAvailable.map((o) => ({
+        id: o.id,
+        seller_id: o.seller_id,
+        seller_name: o.seller_name
+      }))
+    )
     return new StepResponse(optionsAvailable)
   }
 )

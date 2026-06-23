@@ -15,6 +15,7 @@ import { requestsMiddlewares } from './requests/middlewares'
 import { returnRequestsMiddlewares } from './return-request/middlewares'
 import { reviewsMiddlewares } from './reviews/middlewares'
 import { sellerMiddlewares } from './sellers/middlewares'
+import { articleMiddlewares } from './articles/middlewares'
 
 export const adminMiddlewares: MiddlewareRoute[] = [
   ...adminUploadMiddlewares,
@@ -31,5 +32,6 @@ export const adminMiddlewares: MiddlewareRoute[] = [
   ...attributeMiddlewares,
   ...adminProductsMiddlewares,
   ...citiesMiddlewares,
+  ...articleMiddlewares,
   // ...adminApiClientsMiddlewares  // Temporarily disabled
 ]
