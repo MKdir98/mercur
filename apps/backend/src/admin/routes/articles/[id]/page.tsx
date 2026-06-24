@@ -8,10 +8,10 @@ import {
   Text,
   Skeleton,
   DropdownMenu,
-  AlertDialog,
+  Prompt,
 } from '@medusajs/ui'
-import { useArticle, useDeleteArticle } from '../../hooks/api/articles'
-import { useAuthInterceptor } from '../../hooks/use-auth-interceptor'
+import { useArticle, useDeleteArticle } from '../../../hooks/api/articles'
+import { useAuthInterceptor } from '../../../hooks/use-auth-interceptor'
 
 const ArticleDetailPage = () => {
   useAuthInterceptor()
@@ -64,25 +64,25 @@ const ArticleDetailPage = () => {
           >
             Edit
           </Button>
-          <AlertDialog>
-            <AlertDialog.Trigger asChild>
+          <Prompt>
+            <Prompt.Trigger asChild>
               <Button variant="danger" size="small">
                 Delete
               </Button>
-            </AlertDialog.Trigger>
-            <AlertDialog.Content>
-              <AlertDialog.Title>Delete Article</AlertDialog.Title>
-              <AlertDialog.Description>
+            </Prompt.Trigger>
+            <Prompt.Content>
+              <Prompt.Title>Delete Article</Prompt.Title>
+              <Prompt.Description>
                 Are you sure you want to delete this article? This action cannot be undone.
-              </AlertDialog.Description>
-              <AlertDialog.Footer>
-                <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                <AlertDialog.Action onClick={handleDelete}>
+              </Prompt.Description>
+              <Prompt.Footer>
+                <Prompt.Cancel>Cancel</Prompt.Cancel>
+                <Prompt.Action onClick={handleDelete}>
                   Delete
-                </AlertDialog.Action>
-              </AlertDialog.Footer>
-            </AlertDialog.Content>
-          </AlertDialog>
+                </Prompt.Action>
+              </Prompt.Footer>
+            </Prompt.Content>
+          </Prompt>
         </div>
       </div>
 

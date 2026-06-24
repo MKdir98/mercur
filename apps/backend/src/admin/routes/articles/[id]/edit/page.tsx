@@ -8,11 +8,11 @@ import {
   toast,
   Skeleton,
 } from '@medusajs/ui'
-import { useArticle } from '../../hooks/api/articles'
-import { ArticleForm, UpdateArticleFormSchema } from '../components/ArticleForm'
+import { useArticle } from '../../../../hooks/api/articles'
+import { ArticleForm, UpdateArticleFormSchema } from '../../components/ArticleForm'
 import { z } from 'zod'
-import { mercurQuery } from '../../../lib/client'
-import { articleQueryKeys } from '../../hooks/api/articles'
+import { mercurQuery } from '../../../../lib/client'
+import { articleQueryKeys } from '../../../../hooks/api/articles'
 
 const EditArticlePage = () => {
   const { id } = useParams<{ id: string }>()

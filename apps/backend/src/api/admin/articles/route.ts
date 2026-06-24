@@ -1,5 +1,6 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
+import { ARTICLE_MODULE, ArticleModuleService } from '@mercurjs/article'
 
 import {
   AdminCreateArticleType,
@@ -123,7 +124,7 @@ export const POST = async (
   res: MedusaResponse
 ) => {
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
-  const articleService = req.scope.resolve('article')
+  const articleService = req.scope.resolve<ArticleModuleService>(ARTICLE_MODULE)
 
   const { tag_ids, category_ids, ...articleData } = req.validatedBody
 
@@ -134,7 +135,7 @@ export const POST = async (
       tag_ids.map((tag_id) => ({
         article_id: created.id,
         article_tag_id: tag_id
-      }))
+      })) as any
     )
   }
 
@@ -143,7 +144,7 @@ export const POST = async (
       category_ids.map((category_id) => ({
         article_id: created.id,
         article_category_id: category_id
-      }))
+      })) as any
     )
   }
 

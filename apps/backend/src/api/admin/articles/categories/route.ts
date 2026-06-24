@@ -1,5 +1,6 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
+import { ARTICLE_MODULE, ArticleModuleService } from '@mercurjs/article'
 
 import { AdminCreateArticleCategoryType, AdminGetArticleCategoriesParamsType } from './validators'
 
@@ -49,7 +50,7 @@ export const POST = async (
   req: MedusaRequest<AdminCreateArticleCategoryType>,
   res: MedusaResponse
 ) => {
-  const articleService = req.scope.resolve('article')
+  const articleService = req.scope.resolve<ArticleModuleService>(ARTICLE_MODULE)
 
   const category = await articleService.createArticleCategories(req.validatedBody)
 

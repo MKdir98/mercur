@@ -1,6 +1,7 @@
 import { MedusaRequest, MedusaResponse } from '@medusajs/framework'
+import { ARTICLE_MODULE, ArticleModuleService } from '@mercurjs/article'
 
-import { AdminUpdateArticleCategoryType } from './validators'
+import { AdminUpdateArticleCategoryType } from '../validators'
 
 /**
  * @oas [get] /admin/articles/categories/{id}
@@ -17,7 +18,7 @@ export const GET = async (
   req: MedusaRequest,
   res: MedusaResponse
 ) => {
-  const articleService = req.scope.resolve('article')
+  const articleService = req.scope.resolve<ArticleModuleService>(ARTICLE_MODULE)
 
   const category = await articleService.retrieveArticleCategory(req.params.id)
 
@@ -39,7 +40,7 @@ export const POST = async (
   req: MedusaRequest<AdminUpdateArticleCategoryType>,
   res: MedusaResponse
 ) => {
-  const articleService = req.scope.resolve('article')
+  const articleService = req.scope.resolve<ArticleModuleService>(ARTICLE_MODULE)
 
   await articleService.updateArticleCategories([{ id: req.params.id, ...req.validatedBody }])
 
@@ -63,7 +64,7 @@ export const DELETE = async (
   req: MedusaRequest,
   res: MedusaResponse
 ) => {
-  const articleService = req.scope.resolve('article')
+  const articleService = req.scope.resolve<ArticleModuleService>(ARTICLE_MODULE)
 
   await articleService.deleteArticleCategories([req.params.id])
 

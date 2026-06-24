@@ -11,6 +11,14 @@ import {
   AdminGetArticlesParams,
   AdminUpdateArticle
 } from './validators'
+import {
+  AdminCreateArticleTag,
+  AdminUpdateArticleTag
+} from './tags/validators'
+import {
+  AdminCreateArticleCategory,
+  AdminUpdateArticleCategory
+} from './categories/validators'
 
 export const articleMiddlewares: MiddlewareRoute[] = [
   {
@@ -69,7 +77,7 @@ export const articleMiddlewares: MiddlewareRoute[] = [
     method: ['POST'],
     matcher: '/admin/articles/tags',
     middlewares: [
-      validateAndTransformBody((await import('./tags/validators')).AdminCreateArticleTag)
+      validateAndTransformBody(AdminCreateArticleTag)
     ]
   },
   {
@@ -81,7 +89,7 @@ export const articleMiddlewares: MiddlewareRoute[] = [
     method: ['POST'],
     matcher: '/admin/articles/tags/:id',
     middlewares: [
-      validateAndTransformBody((await import('./tags/validators')).AdminUpdateArticleTag)
+      validateAndTransformBody(AdminUpdateArticleTag)
     ]
   },
   {
@@ -98,7 +106,7 @@ export const articleMiddlewares: MiddlewareRoute[] = [
     method: ['POST'],
     matcher: '/admin/articles/categories',
     middlewares: [
-      validateAndTransformBody((await import('./categories/validators')).AdminCreateArticleCategory)
+      validateAndTransformBody(AdminCreateArticleCategory)
     ]
   },
   {
@@ -110,7 +118,7 @@ export const articleMiddlewares: MiddlewareRoute[] = [
     method: ['POST'],
     matcher: '/admin/articles/categories/:id',
     middlewares: [
-      validateAndTransformBody((await import('./categories/validators')).AdminUpdateArticleCategory)
+      validateAndTransformBody(AdminUpdateArticleCategory)
     ]
   },
   {

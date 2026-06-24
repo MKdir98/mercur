@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { SingleColumnLayout } from '../../layouts/single-column'
 import { useArticleTableColumns } from '../../hooks/table/columns/use-article-table-columns'
 import { useAuthInterceptor } from '../../hooks/use-auth-interceptor'
-import { ArticleDTO } from '../../../modules/article/types'
+import { ArticleDTO } from '@mercurjs/framework'
 import { useArticles } from '../../hooks/api/articles'
 
 const ArticlesPage = () => {

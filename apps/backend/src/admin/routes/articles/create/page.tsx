@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArticleForm, CreateArticleFormSchema } from '../components/ArticleForm'
 import { z } from 'zod'
 import { mercurQuery } from '../../../lib/client'
-import { articleQueryKeys } from '../../hooks/api/articles'
+import { articleQueryKeys } from '../../../hooks/api/articles'
 
 const CreateArticlePage = () => {
   const navigate = useNavigate()
