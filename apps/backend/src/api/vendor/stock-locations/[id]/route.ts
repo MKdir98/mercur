@@ -9,11 +9,11 @@ import {
 } from '@medusajs/medusa/core-flows'
 
 import { IntermediateEvents } from '@mercurjs/framework'
-import { SELLER_MODULE } from '@mercurjs/seller'
 
-import sellerShippingProfileLink from '../../../../links/seller-shipping-profile'
-import sellerStockLocationLink from '../../../../links/seller-stock-location'
-import { fetchSellerByAuthActorId } from '../../../../shared/infra/http/utils'
+import {
+  ensureSellerPostexShipping,
+  fetchSellerByAuthActorId
+} from '../../../../shared/infra/http/utils'
 import { updateStockLocationAddressCityIdWorkflow } from '../../../../workflows/stock-location/workflows'
 import { VendorUpdateStockLocationType } from '../validators'
 
@@ -167,7 +167,6 @@ export const POST = async (
   const { id } = req.params
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
   const remoteLink = req.scope.resolve(ContainerRegistrationKeys.REMOTE_LINK)
-  const fulfillmentModule = req.scope.resolve(Modules.FULFILLMENT)
 
   const seller = await fetchSellerByAuthActorId(
     req.auth_context.actor_id,
@@ -215,111 +214,8 @@ export const POST = async (
     data: { id }
   })
 
-  // Auto-setup PostEx if seller doesn't have it yet
   try {
-    const { data: sellerLocations } = await query.graph({
-      entity: sellerStockLocationLink.entryPoint,
-      fields: [
-        'stock_location.id',
-        'stock_location.name',
-        'stock_location.fulfillment_sets.id',
-        'stock_location.fulfillment_sets.type',
-        'stock_location.fulfillment_sets.service_zones.id',
-        'stock_location.fulfillment_sets.service_zones.shipping_options.provider_id'
-      ],
-      filters: { seller_id: seller.id }
-    })
-
-    const locations = (sellerLocations as any[])
-      .map((sl) => sl.stock_location)
-      .filter(Boolean)
-
-    const hasPostex = locations.some((loc) =>
-      loc.fulfillment_sets?.some((fs: any) =>
-        fs.service_zones?.some((sz: any) =>
-          sz.shipping_options?.some((so: any) =>
-            so.provider_id?.includes('postex_postex')
-          )
-        )
-      )
-    )
-
-    if (!hasPostex) {
-      const currentLocation = locations.find((loc) => loc.id === id)
-
-      let fulfillmentSetId: string
-      const existingFs = currentLocation?.fulfillment_sets?.find(
-        (fs: any) => fs.type === 'shipping'
-      )
-
-      if (existingFs) {
-        fulfillmentSetId = existingFs.id
-      } else {
-        const [newFs] = await fulfillmentModule.createFulfillmentSets([
-          { name: `${currentLocation?.name ?? id} shipping`, type: 'shipping' }
-        ])
-        fulfillmentSetId = newFs.id
-        await remoteLink.create([
-          {
-            [Modules.STOCK_LOCATION]: { stock_location_id: id },
-            [Modules.FULFILLMENT]: { fulfillment_set_id: fulfillmentSetId }
-          },
-          {
-            [SELLER_MODULE]: { seller_id: seller.id },
-            [Modules.FULFILLMENT]: { fulfillment_set_id: fulfillmentSetId }
-          }
-        ])
-      }
-
-      let serviceZoneId: string
-      const existingSz = existingFs?.service_zones?.[0]
-
-      if (existingSz) {
-        serviceZoneId = existingSz.id
-      } else {
-        const [newSz] = await fulfillmentModule.createServiceZones([
-          {
-            name: `Iran-${fulfillmentSetId}`,
-            fulfillment_set_id: fulfillmentSetId,
-            geo_zones: [{ type: 'country', country_code: 'ir' }]
-          }
-        ])
-        serviceZoneId = newSz.id
-      }
-
-      const { data: profileLinks } = await query.graph({
-        entity: sellerShippingProfileLink.entryPoint,
-        fields: ['shipping_profile.id'],
-        filters: { seller_id: seller.id }
-      })
-      const shippingProfileId = (profileLinks[0] as any)?.shipping_profile?.id
-
-      if (shippingProfileId) {
-        const [shippingOption] = await fulfillmentModule.createShippingOptions([
-          {
-            name: 'ارسال پستکس',
-            service_zone_id: serviceZoneId,
-            shipping_profile_id: shippingProfileId,
-            provider_id: 'postex_postex',
-            price_type: 'calculated',
-            type: {
-              label: 'ارسال پستکس',
-              description: 'ارسال از طریق پستکس',
-              code: 'postex-delivery'
-            }
-          }
-        ])
-        await remoteLink.create({
-          [SELLER_MODULE]: { seller_id: seller.id },
-          [Modules.FULFILLMENT]: { shipping_option_id: shippingOption.id }
-        })
-      }
-
-      await remoteLink.create({
-        [Modules.STOCK_LOCATION]: { stock_location_id: id },
-        [Modules.FULFILLMENT]: { fulfillment_provider_id: 'postex_postex' }
-      })
-    }
+    await ensureSellerPostexShipping(seller.id, id, req.scope)
   } catch (postexError) {
     console.error('⚠️ PostEx auto-setup failed for location:', id, postexError)
   }

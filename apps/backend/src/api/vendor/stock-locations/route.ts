@@ -5,9 +5,11 @@ import { createStockLocationsWorkflow } from '@medusajs/medusa/core-flows'
 import { IntermediateEvents } from '@mercurjs/framework'
 import { SELLER_MODULE } from '@mercurjs/seller'
 
-import sellerShippingProfileLink from '../../../links/seller-shipping-profile'
 import sellerStockLocationLink from '../../../links/seller-stock-location'
-import { fetchSellerByAuthActorId } from '../../../shared/infra/http/utils'
+import {
+  ensureSellerPostexShipping,
+  fetchSellerByAuthActorId
+} from '../../../shared/infra/http/utils'
 import { updateStockLocationAddressCityIdWorkflow } from '../../../workflows/stock-location/workflows'
 import { VendorCreateStockLocationType } from './validators'
 
@@ -104,100 +106,15 @@ export const POST = async (
     data: { id: result[0].id }
   })
 
-  // Auto-setup PostEx shipping for this location (skip if seller already has PostEx on another warehouse)
-  const { data: existingSellerLocations } = await query.graph({
-    entity: sellerStockLocationLink.entryPoint,
-    fields: [
-      'stock_location.id',
-      'stock_location.fulfillment_sets.service_zones.shipping_options.provider_id'
-    ],
-    filters: { seller_id: seller.id }
-  })
-  const hasPostexElsewhere = (existingSellerLocations as any[])
-    .map((sl) => sl.stock_location)
-    .filter(Boolean)
-    .some(
-      (loc) =>
-        loc.id !== result[0].id &&
-        loc.fulfillment_sets?.some((fs: any) =>
-          fs.service_zones?.some((sz: any) =>
-            sz.shipping_options?.some((so: any) =>
-              so.provider_id?.includes('postex_postex')
-            )
-          )
-        )
+  try {
+    await ensureSellerPostexShipping(seller.id, result[0].id, req.scope)
+  } catch (postexError) {
+    console.error(
+      '⚠️ PostEx auto-setup failed for location:',
+      result[0].id,
+      postexError
     )
-
-  if (!hasPostexElsewhere)
-    try {
-      const fulfillmentModule = req.scope.resolve(Modules.FULFILLMENT)
-
-      const [fulfillmentSet] = await fulfillmentModule.createFulfillmentSets([
-        {
-          name: `${result[0].name} shipping`,
-          type: 'shipping'
-        }
-      ])
-
-      await remoteLink.create([
-        {
-          [Modules.STOCK_LOCATION]: { stock_location_id: result[0].id },
-          [Modules.FULFILLMENT]: { fulfillment_set_id: fulfillmentSet.id }
-        },
-        {
-          [SELLER_MODULE]: { seller_id: seller.id },
-          [Modules.FULFILLMENT]: { fulfillment_set_id: fulfillmentSet.id }
-        }
-      ])
-
-      const [serviceZone] = await fulfillmentModule.createServiceZones([
-        {
-          name: `Iran-${fulfillmentSet.id}`,
-          fulfillment_set_id: fulfillmentSet.id,
-          geo_zones: [{ type: 'country', country_code: 'ir' }]
-        }
-      ])
-
-      const { data: profileLinks } = await query.graph({
-        entity: sellerShippingProfileLink.entryPoint,
-        fields: ['shipping_profile.id'],
-        filters: { seller_id: seller.id }
-      })
-      const shippingProfileId = (profileLinks[0] as any)?.shipping_profile?.id
-
-      if (shippingProfileId) {
-        const [shippingOption] = await fulfillmentModule.createShippingOptions([
-          {
-            name: 'ارسال پستکس',
-            service_zone_id: serviceZone.id,
-            shipping_profile_id: shippingProfileId,
-            provider_id: 'postex_postex',
-            price_type: 'calculated',
-            type: {
-              label: 'ارسال پستکس',
-              description: 'ارسال از طریق پستکس',
-              code: 'postex-delivery'
-            }
-          }
-        ])
-
-        await remoteLink.create({
-          [SELLER_MODULE]: { seller_id: seller.id },
-          [Modules.FULFILLMENT]: { shipping_option_id: shippingOption.id }
-        })
-      }
-
-      await remoteLink.create({
-        [Modules.STOCK_LOCATION]: { stock_location_id: result[0].id },
-        [Modules.FULFILLMENT]: { fulfillment_provider_id: 'postex_postex' }
-      })
-    } catch (postexError) {
-      console.error(
-        '⚠️ PostEx auto-setup failed for location:',
-        result[0].id,
-        postexError
-      )
-    }
+  }
 
   const {
     data: [stockLocation]
