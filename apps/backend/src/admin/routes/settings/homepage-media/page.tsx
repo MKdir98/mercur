@@ -1,5 +1,5 @@
 import { defineRouteConfig } from "@medusajs/admin-sdk";
-import { ArrowDownTray } from "@medusajs/icons";
+import { ArrowDownTray, XMark, ChevronUpMini, ChevronDownMini } from "@medusajs/icons";
 import {
   Button,
   Container,
@@ -10,7 +10,7 @@ import {
   Text,
   toast,
 } from "@medusajs/ui";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useCallback } from "react";
 import {
   useHomepageMedia,
   useUpdateHomepageMedia,
@@ -18,30 +18,11 @@ import {
 } from "../../../hooks/api/homepage-media";
 import { useProductCategories } from "../../../hooks/api/product_category";
 import { clx } from "@medusajs/ui";
+import { resolveImageUrl } from "../../../utils";
+import { mercurQuery } from "../../../lib/client";
 
 const ACCEPT_IMAGE = "image/jpeg,image/png,image/gif,image/webp,image/svg+xml";
 const ACCEPT_VIDEO = "video/mp4,video/webm";
-
-/** Rewrites absolute URLs saved with a local backend host to the current admin origin. */
-function resolveMediaPreviewUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (typeof window === "undefined") {
-    return url;
-  }
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    try {
-      const parsed = new URL(url);
-      const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
-      if (localHosts.has(parsed.hostname)) {
-        return `${window.location.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
-      }
-      return url;
-    } catch {
-      return url;
-    }
-  }
-  return `${window.location.origin}${url.startsWith("/") ? "" : "/"}${url}`;
-}
 
 const uploadFile = async (file: File): Promise<string | undefined> => {
   const bearer =
@@ -133,6 +114,170 @@ const CategoryBannerSlotCard = ({
   );
 };
 
+interface AdminProduct {
+  id: string;
+  title: string;
+  thumbnail: string | null;
+}
+
+const ProductsSlotCard = ({
+  item,
+  onProductIdsChange,
+}: {
+  item: HomepageMediaItem;
+  onProductIdsChange: (key: string, ids: string[]) => void;
+}) => {
+  const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<AdminProduct[]>([]);
+  const [searching, setSearching] = useState(false);
+  const selectedIds: string[] = item.product_ids ?? [];
+
+  const handleSearch = useCallback(async (q: string) => {
+    setSearch(q);
+    if (!q.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const data: any = await mercurQuery("/admin/products", {
+        method: "GET",
+        query: { q, limit: 20, fields: "id,title,thumbnail" },
+      });
+      setSearchResults(
+        (data?.products || []).map((p: any) => ({
+          id: p.id,
+          title: p.title,
+          thumbnail: p.thumbnail ?? null,
+        }))
+      );
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  const addProduct = (product: AdminProduct) => {
+    if (selectedIds.includes(product.id)) return;
+    onProductIdsChange(item.key, [...selectedIds, product.id]);
+    setSearch("");
+    setSearchResults([]);
+  };
+
+  const removeProduct = (id: string) => {
+    onProductIdsChange(item.key, selectedIds.filter((pid) => pid !== id));
+  };
+
+  const moveUp = (index: number) => {
+    if (index === 0) return;
+    const next = [...selectedIds];
+    [next[index - 1], next[index]] = [next[index], next[index - 1]];
+    onProductIdsChange(item.key, next);
+  };
+
+  const moveDown = (index: number) => {
+    if (index === selectedIds.length - 1) return;
+    const next = [...selectedIds];
+    [next[index], next[index + 1]] = [next[index + 1], next[index]];
+    onProductIdsChange(item.key, next);
+  };
+
+  return (
+    <div className={clx("rounded-lg border border-ui-border-base p-4 bg-ui-bg-component")}>
+      <Text weight="plus" className="mb-1 block">{item.label}</Text>
+      <Text size="small" className="text-ui-fg-subtle mb-3 block">
+        Selected products are shown on the storefront in this order. Leave empty to show nothing.
+      </Text>
+
+      <div className="mb-3 relative">
+        <Label className="mb-1 block">Search products</Label>
+        <Input
+          value={search}
+          onChange={(e) => handleSearch(e.target.value)}
+          placeholder="Type to search…"
+        />
+        {(searchResults.length > 0 || searching) && (
+          <div className="absolute z-10 mt-1 w-full rounded-lg border border-ui-border-base bg-ui-bg-base shadow-lg max-h-60 overflow-y-auto">
+            {searching && (
+              <div className="p-3 text-ui-fg-subtle text-small-regular">Searching…</div>
+            )}
+            {!searching && searchResults.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => addProduct(p)}
+                disabled={selectedIds.includes(p.id)}
+                className={clx(
+                  "flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-ui-bg-base-hover",
+                  selectedIds.includes(p.id) && "opacity-40 cursor-not-allowed"
+                )}
+              >
+                {p.thumbnail ? (
+                  <img src={p.thumbnail} alt="" className="h-8 w-8 rounded object-cover border flex-shrink-0" />
+                ) : (
+                  <div className="h-8 w-8 rounded border bg-ui-bg-subtle flex-shrink-0" />
+                )}
+                <Text size="small" className="truncate">{p.title}</Text>
+                {selectedIds.includes(p.id) && (
+                  <Text size="small" className="ml-auto text-ui-fg-subtle flex-shrink-0">Added</Text>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {selectedIds.length > 0 ? (
+        <div className="space-y-2">
+          <Label className="block">Selected ({selectedIds.length})</Label>
+          {selectedIds.map((id, index) => (
+            <div
+              key={id}
+              className="flex items-center gap-2 rounded-md border border-ui-border-base bg-ui-bg-subtle px-2 py-1"
+            >
+              <Text size="small" className="text-ui-fg-subtle w-5 text-center flex-shrink-0">
+                {index + 1}
+              </Text>
+              <Text size="small" className="flex-1 font-mono truncate text-ui-fg-subtle">{id}</Text>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => moveUp(index)}
+                  disabled={index === 0}
+                  className="rounded p-0.5 hover:bg-ui-bg-base disabled:opacity-30"
+                  title="Move up"
+                >
+                  <ChevronUpMini />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveDown(index)}
+                  disabled={index === selectedIds.length - 1}
+                  className="rounded p-0.5 hover:bg-ui-bg-base disabled:opacity-30"
+                  title="Move down"
+                >
+                  <ChevronDownMini />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeProduct(id)}
+                  className="rounded p-0.5 hover:bg-ui-bg-base text-ui-fg-subtle hover:text-ui-fg-error"
+                  title="Remove"
+                >
+                  <XMark />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <Text size="small" className="text-ui-fg-subtle italic">No products selected — section will be hidden.</Text>
+      )}
+    </div>
+  );
+};
+
 const MediaCard = ({
   item,
   onImageChange,
@@ -181,7 +326,7 @@ const MediaCard = ({
     }
   };
 
-  const displayUrl = resolveMediaPreviewUrl(item.image_url);
+  const displayUrl = resolveImageUrl(item.image_url);
 
   return (
     <div
@@ -194,13 +339,13 @@ const MediaCard = ({
         {item.label}
       </Text>
       <Text size="small" className="text-ui-fg-subtle mb-3 block">
-        {item.type === "video" ? "Video + Poster" : "Image"}
+        Image / Video
       </Text>
 
       <div className="space-y-3">
         <div>
           <Label className="mb-1 block">
-            {item.type === "video" ? "Poster / Image" : "Image"}
+            Image / Poster
           </Label>
           <input
             ref={imageInputRef}
@@ -255,62 +400,60 @@ const MediaCard = ({
           )}
         </div>
 
-        {item.type === "video" && (
-          <div>
-            <Label className="mb-1 block">Video</Label>
-            <input
-              ref={videoInputRef}
-              type="file"
-              accept={ACCEPT_VIDEO}
-              className="hidden"
-              onChange={handleVideoUpload}
-            />
-            {item.video_url ? (
-              <div className="flex items-center gap-2">
-                <video
-                  src={resolveMediaPreviewUrl(item.video_url) ?? undefined}
-                  className="h-16 w-24 rounded object-cover border"
-                  muted
-                  playsInline
-                />
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="small"
-                    variant="secondary"
-                    onClick={() => videoInputRef.current?.click()}
-                    disabled={uploadingVideo}
-                  >
-                    {uploadingVideo ? "Uploading..." : "Change"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="small"
-                    variant="transparent"
-                    onClick={() => onVideoChange(item.key, null)}
-                  >
-                    Clear
-                  </Button>
-                </div>
+        <div>
+          <Label className="mb-1 block">Video (optional)</Label>
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept={ACCEPT_VIDEO}
+            className="hidden"
+            onChange={handleVideoUpload}
+          />
+          {item.video_url ? (
+            <div className="flex items-center gap-2">
+              <video
+                src={resolveImageUrl(item.video_url) ?? undefined}
+                className="h-16 w-24 rounded object-cover border"
+                muted
+                playsInline
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="small"
+                  variant="secondary"
+                  onClick={() => videoInputRef.current?.click()}
+                  disabled={uploadingVideo}
+                >
+                  {uploadingVideo ? "Uploading..." : "Change"}
+                </Button>
+                <Button
+                  type="button"
+                  size="small"
+                  variant="transparent"
+                  onClick={() => onVideoChange(item.key, null)}
+                >
+                  Clear
+                </Button>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => videoInputRef.current?.click()}
-                disabled={uploadingVideo}
-                className={clx(
-                  "flex w-full items-center justify-center gap-2 rounded-lg border border-dashed p-4",
-                  "border-ui-border-strong bg-ui-bg-subtle",
-                  "hover:border-ui-border-interactive"
-                )}
-              >
-                <Text size="small" className="text-ui-fg-subtle">
-                  {uploadingVideo ? "Uploading..." : "Upload video (mp4, webm)"}
-                </Text>
-              </button>
-            )}
-          </div>
-        )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => videoInputRef.current?.click()}
+              disabled={uploadingVideo}
+              className={clx(
+                "flex w-full items-center justify-center gap-2 rounded-lg border border-dashed p-4",
+                "border-ui-border-strong bg-ui-bg-subtle",
+                "hover:border-ui-border-interactive"
+              )}
+            >
+              <Text size="small" className="text-ui-fg-subtle">
+                {uploadingVideo ? "Uploading..." : "Upload video (mp4, webm)"}
+              </Text>
+            </button>
+          )}
+        </div>
 
         <div>
           <Label htmlFor={`link-${item.key}`}>Link (optional)</Label>
@@ -357,8 +500,12 @@ const HomepageMediaPage = () => {
     () => items.filter((i) => i.type === "category"),
     [items]
   );
+  const productSlotItems = useMemo(
+    () => items.filter((i) => i.type === "products"),
+    [items]
+  );
   const mediaOnlyItems = useMemo(
-    () => items.filter((i) => i.type !== "category"),
+    () => items.filter((i) => i.type !== "category" && i.type !== "products"),
     [items]
   );
 
@@ -390,6 +537,13 @@ const HomepageMediaPage = () => {
     }));
   };
 
+  const handleProductIdsChange = (key: string, ids: string[]) => {
+    setLocalItems((prev) => ({
+      ...prev,
+      [key]: { ...prev[key], key, product_ids: ids } as HomepageMediaItem,
+    }));
+  };
+
   const handleSave = async () => {
     const payload = items.map((item) => ({
       key: item.key,
@@ -397,6 +551,7 @@ const HomepageMediaPage = () => {
       video_url: item.video_url,
       link: item.link,
       alt: item.alt,
+      product_ids: item.product_ids ?? null,
     }));
     try {
       await updateMedia({ items: payload });
@@ -455,6 +610,26 @@ const HomepageMediaPage = () => {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {productSlotItems.length > 0 && (
+            <div>
+              <Heading level="h2" className="mb-1 text-base">
+                Homepage product sections
+              </Heading>
+              <Text size="small" className="text-ui-fg-subtle mb-4 block">
+                Pin specific products for each section. Order is preserved on the storefront. Leave empty to hide the section.
+              </Text>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {productSlotItems.map((item) => (
+                  <ProductsSlotCard
+                    key={item.key}
+                    item={item}
+                    onProductIdsChange={handleProductIdsChange}
+                  />
+                ))}
+              </div>
             </div>
           )}
 

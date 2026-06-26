@@ -18,6 +18,7 @@ export interface HomepageMediaItem {
   video_url: string | null;
   link: string | null;
   alt: string | null;
+  product_ids: string[] | null;
 }
 
 export const homepageMediaQueryKeys = queryKeysFactory("homepage_media");
@@ -44,7 +45,7 @@ export const useUpdateHomepageMedia = (
   options?: UseMutationOptions<
     { homepage_media: HomepageMediaItem[] },
     Error,
-    { items: Array<{ key: string; image_url?: string | null; video_url?: string | null; link?: string | null; alt?: string | null }> }
+    { items: Array<{ key: string; image_url?: string | null; video_url?: string | null; link?: string | null; alt?: string | null; product_ids?: string[] | null }> }
   >
 ) => {
   return useMutation({

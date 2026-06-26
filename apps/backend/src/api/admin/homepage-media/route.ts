@@ -13,27 +13,17 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   ) as HomepageMediaModuleService;
 
   const items = await service.listHomepageMediaItems({});
-  const formatted = (items || []).map(
-    (item: {
-      id: string;
-      key: string;
-      label: string;
-      type: string;
-      image_url?: string | null;
-      video_url?: string | null;
-      link?: string | null;
-      alt?: string | null;
-    }) => ({
-      id: item.id,
-      key: item.key,
-      label: item.label,
-      type: item.type,
-      image_url: item.image_url ?? null,
-      video_url: item.video_url ?? null,
-      link: item.link ?? null,
-      alt: item.alt ?? null,
-    })
-  );
+  const formatted = (items || []).map((item: any) => ({
+    id: item.id,
+    key: item.key,
+    label: item.label,
+    type: item.type,
+    image_url: item.image_url ?? null,
+    video_url: item.video_url ?? null,
+    link: item.link ?? null,
+    alt: item.alt ?? null,
+    product_ids: item.product_ids ? JSON.parse(item.product_ids) : null,
+  }));
 
   res.json({ homepage_media: formatted });
 };
@@ -65,6 +55,7 @@ export const PUT = async (
     if (item.video_url !== undefined) data.video_url = item.video_url;
     if (item.link !== undefined) data.link = item.link;
     if (item.alt !== undefined) data.alt = item.alt;
+    if (item.product_ids !== undefined) data.product_ids = item.product_ids !== null ? JSON.stringify(item.product_ids) : null;
 
     if (Object.keys(data).length > 0) {
       await service.updateHomepageMediaItems({
@@ -75,27 +66,17 @@ export const PUT = async (
   }
 
   const updated = await service.listHomepageMediaItems({});
-  const formatted = (updated || []).map(
-    (item: {
-      id: string;
-      key: string;
-      label: string;
-      type: string;
-      image_url?: string | null;
-      video_url?: string | null;
-      link?: string | null;
-      alt?: string | null;
-    }) => ({
-      id: item.id,
-      key: item.key,
-      label: item.label,
-      type: item.type,
-      image_url: item.image_url ?? null,
-      video_url: item.video_url ?? null,
-      link: item.link ?? null,
-      alt: item.alt ?? null,
-    })
-  );
+  const formatted = (updated || []).map((item: any) => ({
+    id: item.id,
+    key: item.key,
+    label: item.label,
+    type: item.type,
+    image_url: item.image_url ?? null,
+    video_url: item.video_url ?? null,
+    link: item.link ?? null,
+    alt: item.alt ?? null,
+    product_ids: item.product_ids ? JSON.parse(item.product_ids) : null,
+  }));
 
   res.json({ homepage_media: formatted });
 };

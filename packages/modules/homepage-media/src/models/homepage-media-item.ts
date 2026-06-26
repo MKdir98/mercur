@@ -9,4 +9,5 @@ export const HomepageMediaItem = model.define("homepage_media_item", {
   video_url: model.text().nullable(),
   link: model.text().nullable(),
   alt: model.text().nullable(),
+  product_ids: model.text().nullable(),
 });

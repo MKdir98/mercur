@@ -6,6 +6,7 @@ export const AdminUpdateHomepageMediaItem = z.object({
   video_url: z.string().nullable().optional(),
   link: z.string().nullable().optional(),
   alt: z.string().nullable().optional(),
+  product_ids: z.array(z.string()).nullable().optional(),
 });
 
 export const AdminUpdateHomepageMediaBody = z.object({

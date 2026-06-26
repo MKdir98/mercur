@@ -12,6 +12,7 @@ import {
 } from '@medusajs/ui'
 import { useArticle, useDeleteArticle } from '../../../hooks/api/articles'
 import { useAuthInterceptor } from '../../../hooks/use-auth-interceptor'
+import { resolveImageUrl } from '../../../utils'
 
 const ArticleDetailPage = () => {
   useAuthInterceptor()
@@ -116,7 +117,7 @@ const ArticleDetailPage = () => {
             <div className="bg-gray-50 rounded-lg p-4">
               <Text size="small" className="text-gray-500 mb-1">Cover Image</Text>
               <img
-                src={article.cover_image}
+                src={resolveImageUrl(article.cover_image) ?? undefined}
                 alt="Cover"
                 className="w-full rounded-md"
               />

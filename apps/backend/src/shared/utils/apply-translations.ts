@@ -5,8 +5,21 @@ export function applyTranslations<T>(
 ): T {
   if (!map || Object.keys(map).length === 0) return data
 
+  const lowerMap: Record<string, string> = {}
+  for (const [k, v] of Object.entries(map)) {
+    lowerMap[k.toLowerCase()] = v
+  }
+
+  return applyTranslationsWithMap(data, lowerMap, fields)
+}
+
+function applyTranslationsWithMap<T>(
+  data: T,
+  lowerMap: Record<string, string>,
+  fields: string[]
+): T {
   if (Array.isArray(data)) {
-    return data.map((item) => applyTranslations(item, map, fields)) as T
+    return data.map((item) => applyTranslationsWithMap(item, lowerMap, fields)) as T
   }
 
   if (data && typeof data === 'object') {
@@ -14,15 +27,18 @@ export function applyTranslations<T>(
 
     for (const field of fields) {
       const val = result[field]
-      if (typeof val === 'string' && map[val.toLowerCase()]) {
-        result[field] = map[val.toLowerCase()]
+      if (typeof val === 'string') {
+        const translated = lowerMap[val.toLowerCase()]
+        if (translated) {
+          result[field] = translated
+        }
       }
     }
 
     for (const key of Object.keys(result)) {
       const val = result[key]
       if (val && typeof val === 'object') {
-        result[key] = applyTranslations(val, map, fields)
+        result[key] = applyTranslationsWithMap(val, lowerMap, fields)
       }
     }
 

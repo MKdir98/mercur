@@ -18,6 +18,7 @@ import { useProductCategory, useProductCategories } from "../../../../hooks/api/
 import { productCategoryQueryKeys } from "../../../../hooks/api/product_category"
 import { useQueryClient } from "@tanstack/react-query"
 import { mercurQuery } from "../../../../lib/client"
+import { resolveImageUrl } from "../../../../utils"
 import { useState, useMemo, useRef, useEffect, useCallback } from "react"
 
 const ACCEPT_IMAGE = "image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
@@ -278,7 +279,7 @@ const EditCategoryPage = () => {
               {displayThumbnail ? (
                 <div className="flex items-center gap-3">
                   <img
-                    src={displayThumbnail}
+                    src={resolveImageUrl(displayThumbnail) ?? undefined}
                     alt="Preview"
                     className="h-24 w-24 rounded-md border object-cover"
                   />

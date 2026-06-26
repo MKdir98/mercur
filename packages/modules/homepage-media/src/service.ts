@@ -2,16 +2,24 @@ import { MedusaService } from "@medusajs/framework/utils";
 
 import { HomepageMediaItem } from "./models";
 
+type HomepageMediaItemShape = {
+  key: string;
+  label: string;
+  type: string;
+  image_url: string | null;
+  video_url: string | null;
+  link: string | null;
+  alt: string | null;
+  product_ids: string[] | null;
+};
+
 class HomepageMediaModuleService extends MedusaService({
   HomepageMediaItem,
 }) {
-  async getItemsByKey(): Promise<Record<string, { key: string; label: string; type: string; image_url: string | null; video_url: string | null; link: string | null; alt: string | null }>> {
+  async getItemsByKey(): Promise<Record<string, HomepageMediaItemShape>> {
     const items = await this.listHomepageMediaItems({});
     return (items || []).reduce(
-      (
-        acc: Record<string, { key: string; label: string; type: string; image_url: string | null; video_url: string | null; link: string | null; alt: string | null }>,
-        item: { key: string; label: string; type: string; image_url?: string | null; video_url?: string | null; link?: string | null; alt?: string | null }
-      ) => {
+      (acc: Record<string, HomepageMediaItemShape>, item: any) => {
         if (item.key) {
           acc[item.key] = {
             key: item.key,
@@ -21,6 +29,7 @@ class HomepageMediaModuleService extends MedusaService({
             video_url: item.video_url ?? null,
             link: item.link ?? null,
             alt: item.alt ?? null,
+            product_ids: item.product_ids ? JSON.parse(item.product_ids) : null,
           };
         }
         return acc;

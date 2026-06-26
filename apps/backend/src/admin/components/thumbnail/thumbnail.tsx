@@ -1,5 +1,6 @@
 import { Photo } from "@medusajs/icons"
 import { clx } from "@medusajs/ui"
+import { resolveImageUrl } from "../../utils"
 
 type ThumbnailProps = {
   src?: string | null
@@ -21,7 +22,7 @@ export const Thumbnail = ({ src, alt, size = "base" }: ThumbnailProps) => {
     >
       {src ? (
         <img
-          src={src}
+          src={resolveImageUrl(src) ?? undefined}
           alt={alt}
           className="h-full w-full object-cover object-center"
         />

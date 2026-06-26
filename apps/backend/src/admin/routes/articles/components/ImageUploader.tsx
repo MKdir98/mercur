@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { Button, Label, Text } from '@medusajs/ui'
 import { mercurQuery } from '../../../lib/client'
+import { resolveImageUrl } from '../../../utils'
 
 interface ImageUploaderProps {
   value: string | null
@@ -58,7 +59,7 @@ export const ImageUploader = ({ value, onChange, label }: ImageUploaderProps) =>
         {value ? (
           <div className="relative">
             <img
-              src={value}
+              src={resolveImageUrl(value) ?? undefined}
               alt={label}
               className="w-full h-32 object-cover rounded-md border"
             />

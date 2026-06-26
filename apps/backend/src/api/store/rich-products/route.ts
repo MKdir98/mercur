@@ -35,7 +35,8 @@ const RichProductsQuerySchema = z.object({
   category_id: z.string().optional(),
   category_handle: z.string().optional(),
   collection_id: z.string().optional(),
-  include_facets: z.coerce.boolean().optional().default(false)
+  include_facets: z.coerce.boolean().optional().default(false),
+  id: z.union([z.string(), z.array(z.string())]).optional(),
 })
 
 type RichProductsQueryType = z.infer<typeof RichProductsQuerySchema>
@@ -57,11 +58,22 @@ export const GET = async (
       category_id,
       category_handle,
       collection_id,
-      include_facets
+      include_facets,
+      id: idParam,
     } = validatedQuery
+
+    // Normalize id param to array
+    const pinnedIds: string[] | null = idParam
+      ? Array.isArray(idParam) ? idParam : [idParam]
+      : null
 
     // Base filters for products
     const filters: Record<string, any> = { status: 'published' }
+
+    // If specific IDs are requested, filter to those and return in pinned order
+    if (pinnedIds && pinnedIds.length > 0) {
+      filters['id'] = pinnedIds
+    }
 
     // Add handle filter if provided
     if (handle) {
@@ -388,7 +400,13 @@ export const GET = async (
     }
 
     let sortedProducts = transformedProducts
-    if (sort_by === 'title') {
+    if (pinnedIds && pinnedIds.length > 0) {
+      // Preserve the admin-selected order
+      const idIndex = Object.fromEntries(pinnedIds.map((id, i) => [id, i]))
+      sortedProducts = [...transformedProducts].sort(
+        (a: any, b: any) => (idIndex[a.id] ?? Infinity) - (idIndex[b.id] ?? Infinity)
+      )
+    } else if (sort_by === 'title') {
       sortedProducts = [...transformedProducts].sort((a: any, b: any) =>
         a.title.localeCompare(b.title)
       )

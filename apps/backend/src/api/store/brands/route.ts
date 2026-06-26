@@ -89,15 +89,21 @@ export const GET = async (
     })
 
     const locale = req.headers['x-locale'] as string | undefined
+    console.log('[store/brands] 🌍 x-locale header:', locale, '| shouldTranslate:', locale ? shouldTranslate(locale) : false)
     if (locale && shouldTranslate(locale)) {
       const translationsService = req.scope.resolve(
         TRANSLATIONS_MODULE
       ) as TranslationsModuleService
       const translationMap = await translationsService.getMapForLocale(locale)
+      console.log('[store/brands] 🗺️ translationMap size:', Object.keys(translationMap).length, '| sample keys:', Object.keys(translationMap).slice(0, 3))
+      const beforeDesc = transformedBrands[0]?.description?.slice(0, 60)
       transformedBrands = applyTranslations(transformedBrands, translationMap, [
         'name',
         'description'
       ]) as typeof transformedBrands
+      console.log('[store/brands] ✅ After translation. First brand desc before:', beforeDesc, '| after:', transformedBrands[0]?.description?.slice(0, 60))
+    } else {
+      console.log('[store/brands] ⚠️ Translation skipped — no locale or shouldTranslate=false')
     }
 
     res.json({

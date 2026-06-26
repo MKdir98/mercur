@@ -5,17 +5,25 @@ import { Badge, Button, Container, Heading, Table } from "@medusajs/ui";
 import { useVendorRequest } from "../../../../hooks/api/requests";
 import { ProductDTO } from "@medusajs/framework/types";
 import { useProductCategory } from "../../../../hooks/api/product_category";
-import { useProductCollection } from "../../../../hooks/api/product_collection";
-import { useProductType } from "../../../../hooks/api/product_type";
-import { useProductTags } from "../../../../hooks/api/product_tags";
+import { useProduct } from "../../../../hooks/api/product";
 import { useState } from "react";
 import { ResolveRequestPrompt } from "../../components/resolve-request";
 import { LoadingSpinner } from "../../../../common/LoadingSpinner";
+import { Thumbnail } from "../../../../components/thumbnail/thumbnail";
 
 export const ProductRequestDetail = ({ id }: { id: string }) => {
   const navigate = useNavigate();
   const { request, isError, isLoading } = useVendorRequest(id!);
-  const requestData = request?.data as ProductDTO;
+
+  const isUpdateRequest = request?.type === "product_update";
+  const productId = (request?.data as any)?.product_id ?? "";
+
+  const {
+    product: fetchedProduct,
+    isLoading: isProductLoading,
+  } = useProduct(productId, undefined, { enabled: isUpdateRequest && !!productId });
+
+  const requestData = (isUpdateRequest ? fetchedProduct : request?.data) as ProductDTO;
 
   const [promptOpen, setPromptOpen] = useState(false);
   const [requestAccept, setRequestAccept] = useState(false);
@@ -26,7 +34,11 @@ export const ProductRequestDetail = ({ id }: { id: string }) => {
   };
 
   if (!request || isLoading || isError) {
-    return <LoadingSpinner />
+    return <LoadingSpinner />;
+  }
+
+  if (isUpdateRequest && (isProductLoading || !fetchedProduct)) {
+    return <LoadingSpinner />;
   }
 
   return (
@@ -78,6 +90,7 @@ export const ProductRequestDetail = ({ id }: { id: string }) => {
               value={requestData.discountable ? "True" : "False"}
             />
           </Container>
+          <ProductMediaInfo product={requestData} />
           <ProductOptionsInfo product={requestData} />
           <ProductVariantInfo product={requestData} />
         </>
@@ -90,6 +103,30 @@ export const ProductRequestDetail = ({ id }: { id: string }) => {
       }
     />
   )
+};
+
+const ProductMediaInfo = ({ product }: { product: ProductDTO }) => {
+  const allImages = [
+    ...(product.thumbnail ? [{ id: "thumbnail", url: product.thumbnail }] : []),
+    ...(product.images?.filter((img) => img.url !== product.thumbnail) ?? []),
+  ];
+
+  if (!allImages.length) {
+    return null;
+  }
+
+  return (
+    <Container className="divide-y p-0">
+      <div className="flex items-center justify-between px-6 py-4">
+        <Heading level="h2">Media</Heading>
+      </div>
+      <div className="flex flex-wrap gap-3 px-6 py-4">
+        {allImages.map((img) => (
+          <Thumbnail key={img.id} src={img.url} size="large" />
+        ))}
+      </div>
+    </Container>
+  );
 };
 
 const ProductOptionsInfo = ({ product }: { product: ProductDTO }) => {
@@ -107,11 +144,11 @@ const ProductOptionsInfo = ({ product }: { product: ProductDTO }) => {
             value={option.values?.map((val) => {
               return (
                 <Badge
-                  key={`${option.title}-${val}`}
+                  key={`${option.title}-${val.value}`}
                   size="2xsmall"
                   className="flex min-w-[20px] items-center justify-center"
                 >
-                  {String(val)}
+                  {val.value}
                 </Badge>
               );
             })}
@@ -155,77 +192,17 @@ const ProductVariantInfo = ({ product }: { product: ProductDTO }) => {
 };
 
 const ProductOrganizationInfo = ({ product }: { product: ProductDTO }) => {
-  let category_name = "";
-  let category_id = "";
-  let collection_name = "";
-  let type_name = "";
-  const productTags: { id: string; value: string }[] = [];
-
-  if (product.categories && product.categories[0]) {
-    category_id = product.categories[0].id;
-    const { product_category } = useProductCategory(category_id);
-    category_name = product_category?.name || "";
-  }
-
-  if (product.collection_id) {
-    const { product_collection } = useProductCollection(product.collection_id);
-    collection_name = product_collection?.title || "";
-  }
-
-  if (product.type_id) {
-    const { product_type } = useProductType(product.type_id);
-    type_name = product_type?.value || "";
-  }
-
-  if (product.tags && product.tags.length) {
-    const tagIds = product.tags.map((t) => t.id);
-    const { product_tags } = useProductTags({ id: tagIds });
-    product_tags?.forEach((t) => productTags.push({ id: t.id, value: t.value }));
-  }
+  const category_id = product.categories?.[0]?.id ?? "";
+  const { product_category } = useProductCategory(category_id, {
+    enabled: !!category_id,
+  });
+  const category_name = product_category?.name ?? "";
 
   return (
     <Container className="divide-y p-0">
       <div className="flex items-center justify-between px-6 py-4">
         <Heading level="h2">Organization</Heading>
       </div>
-
-      <SectionRow
-        title={"Tags"}
-        value={
-          productTags
-            ? productTags.map((tag) => (
-                <Badge key={tag.id} className="w-fit" size="2xsmall" asChild>
-                  <Link to={`/products?tag_id=${tag.id}`}>{tag.value}</Link>
-                </Badge>
-              ))
-            : undefined
-        }
-      />
-      <SectionRow
-        title={"Type"}
-        value={
-          type_name ? (
-            <Badge size="2xsmall" className="w-fit" asChild>
-              <Link to={`/products?type_id=${product.type_id}`}>
-                {type_name}
-              </Link>
-            </Badge>
-          ) : undefined
-        }
-      />
-
-      <SectionRow
-        title={"Collection"}
-        value={
-          collection_name ? (
-            <Badge size="2xsmall" className="w-fit" asChild>
-              <Link to={`/collections/${product.collection_id}`}>
-                {collection_name}
-              </Link>
-            </Badge>
-          ) : undefined
-        }
-      />
 
       <SectionRow
         title={"Category"}
@@ -251,9 +228,6 @@ const ProductAttributeInfo = ({ product }: { product: ProductDTO }) => {
       <SectionRow title={"Width (cm)"} value={product.width} />
       <SectionRow title={"Length (cm)"} value={product.length} />
       <SectionRow title={"Weight (g)"} value={product.weight} />
-      <SectionRow title={"Mid code"} value={product.mid_code} />
-      <SectionRow title={"Hs code"} value={product.hs_code} />
-      <SectionRow title={"Country of origin"} value={product.origin_country} />
     </Container>
   );
 };
