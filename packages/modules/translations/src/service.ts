@@ -14,9 +14,9 @@ class TranslationsModuleService extends MedusaService({
       (acc: Record<string, string>, t: { source_text: string; translated_text: string }) => {
         if (t.source_text && t.translated_text) {
           if (locale === "en") {
-            acc[t.translated_text] = t.source_text;
+            acc[t.translated_text.toLowerCase()] = t.source_text;
           } else {
-            acc[t.source_text] = t.translated_text;
+            acc[t.source_text.toLowerCase()] = t.translated_text;
           }
         }
         return acc;

@@ -14,8 +14,8 @@ export function applyTranslations<T>(
 
     for (const field of fields) {
       const val = result[field]
-      if (typeof val === 'string' && map[val]) {
-        result[field] = map[val]
+      if (typeof val === 'string' && map[val.toLowerCase()]) {
+        result[field] = map[val.toLowerCase()]
       }
     }
 
