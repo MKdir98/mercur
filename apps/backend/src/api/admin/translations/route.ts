@@ -25,9 +25,7 @@ export const POST = async (
 ) => {
   const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
 
-  const result = await translationsService.createTranslations(
-    req.validatedBody
-  )
+  const result = await translationsService.createTranslations(req.validatedBody)
   const translation = Array.isArray(result) ? result[0] : result
 
   res.status(201).json({ translation })

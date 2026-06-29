@@ -9,6 +9,7 @@ import {
 
 import {
   AdminCreateTranslation,
+  AdminGenerateTranslation,
   AdminGetTranslationsParams,
   AdminUpdateTranslation,
 } from "./validators";
@@ -33,6 +34,11 @@ export const translationsMiddleware: MiddlewareRoute[] = [
     middlewares: [upload.single('file')],
   },
   {
+    method: ["POST"],
+    matcher: "/admin/translations/generate",
+    middlewares: [validateAndTransformBody(AdminGenerateTranslation)],
+  },
+  {
     method: ["GET"],
     matcher: "/admin/translations/:id",
     middlewares: [],
@@ -42,10 +48,15 @@ export const translationsMiddleware: MiddlewareRoute[] = [
     matcher: "/admin/translations/:id",
     middlewares: [
       unlessPath(
-        /.*\/translations\/import/,
+        /.*\/translations\/(import|generate)/,
         validateAndTransformBody(AdminUpdateTranslation)
       ),
     ],
+  },
+  {
+    method: ["POST"],
+    matcher: "/admin/translations/:id/refresh",
+    middlewares: [],
   },
   {
     method: ["DELETE"],

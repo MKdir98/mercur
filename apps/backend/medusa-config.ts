@@ -108,14 +108,32 @@ module.exports = defineConfig({
       resolve: '@medusajs/medusa/file',
       options: {
         providers: [
-          {
-            resolve: '@medusajs/medusa/file-local',
-            id: 'local',
-            options: {
-              upload_dir: 'static',
-              backend_url: `${process.env.BACKEND_URL}/static`
-            }
-          }
+          // Switch to S3 when S3_FILE_ACCESS_KEY_ID is set; fall back to local for dev.
+          ...(process.env.S3_FILE_ACCESS_KEY_ID
+            ? [
+                {
+                  resolve: '@medusajs/medusa/file-s3',
+                  id: 's3',
+                  options: {
+                    file_url: process.env.S3_FILE_URL,           // https://bucket.s3.region.amazonaws.com
+                    access_key_id: process.env.S3_FILE_ACCESS_KEY_ID,
+                    secret_access_key: process.env.S3_FILE_SECRET_ACCESS_KEY,
+                    region: process.env.S3_FILE_REGION,          // e.g. eu-central-1
+                    bucket: process.env.S3_FILE_BUCKET,
+                    prefix: process.env.S3_FILE_PREFIX || ''     // optional subfolder inside the bucket
+                  }
+                }
+              ]
+            : [
+                {
+                  resolve: '@medusajs/medusa/file-local',
+                  id: 'local',
+                  options: {
+                    upload_dir: 'static',
+                    backend_url: `${process.env.BACKEND_URL}/static`
+                  }
+                }
+              ])
         ]
       }
     },

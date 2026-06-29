@@ -31,7 +31,7 @@ export const VendorGetProductParams = AdminGetProductsParams
  */
 export type CreateProductOptionType = z.infer<typeof CreateProductOption>
 export const CreateProductOption = z.object({
-  title: z.string(),
+  title: z.string().min(1),
   values: z.array(z.string())
 })
 

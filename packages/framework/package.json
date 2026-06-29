@@ -13,6 +13,9 @@
         "node": ">=20"
     },
     "license": "MIT",
+    "dependencies": {
+        "openai": "^6.45.0"
+    },
     "scripts": {
         "build": "rimraf dist && tsc --build",
         "migration:initial": " MIKRO_ORM_CLI_CONFIG=./mikro-orm.config.dev.ts medusa-mikro-orm migration:create --initial",

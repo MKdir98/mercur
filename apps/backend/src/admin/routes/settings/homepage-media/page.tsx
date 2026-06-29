@@ -130,6 +130,7 @@ const ProductsSlotCard = ({
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<AdminProduct[]>([]);
   const [searching, setSearching] = useState(false);
+  const [productMap, setProductMap] = useState<Record<string, AdminProduct>>({});
   const selectedIds: string[] = item.product_ids ?? [];
 
   const handleSearch = useCallback(async (q: string) => {
@@ -160,6 +161,7 @@ const ProductsSlotCard = ({
 
   const addProduct = (product: AdminProduct) => {
     if (selectedIds.includes(product.id)) return;
+    setProductMap((prev) => ({ ...prev, [product.id]: product }));
     onProductIdsChange(item.key, [...selectedIds, product.id]);
     setSearch("");
     setSearchResults([]);
@@ -231,7 +233,9 @@ const ProductsSlotCard = ({
       {selectedIds.length > 0 ? (
         <div className="space-y-2">
           <Label className="block">Selected ({selectedIds.length})</Label>
-          {selectedIds.map((id, index) => (
+          {selectedIds.map((id, index) => {
+            const product = productMap[id];
+            return (
             <div
               key={id}
               className="flex items-center gap-2 rounded-md border border-ui-border-base bg-ui-bg-subtle px-2 py-1"
@@ -239,7 +243,14 @@ const ProductsSlotCard = ({
               <Text size="small" className="text-ui-fg-subtle w-5 text-center flex-shrink-0">
                 {index + 1}
               </Text>
-              <Text size="small" className="flex-1 font-mono truncate text-ui-fg-subtle">{id}</Text>
+              {product?.thumbnail ? (
+                <img src={product.thumbnail} alt="" className="h-7 w-7 rounded object-cover border flex-shrink-0" />
+              ) : (
+                <div className="h-7 w-7 rounded border bg-ui-bg-base flex-shrink-0" />
+              )}
+              <Text size="small" className="flex-1 truncate">
+                {product?.title ?? id}
+              </Text>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button
                   type="button"
@@ -269,7 +280,8 @@ const ProductsSlotCard = ({
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <Text size="small" className="text-ui-fg-subtle italic">No products selected — section will be hidden.</Text>

@@ -12154,6 +12154,11 @@ open@^7.4.2:
     is-docker "^2.0.0"
     is-wsl "^2.1.1"
 
+openai@^6.45.0:
+  version "6.45.0"
+  resolved "https://registry.yarnpkg.com/openai/-/openai-6.45.0.tgz#53840c5c5848884dfbff47006f839b27d1d955b9"
+  integrity sha512-5DQVNErssk0afNpTTHUm/qZPU4iKR9OYdNid8Ib4puq4gHNNvGWZht2zY4h9a8JMF949Ik6m8gQutllVPbjdnw==
+
 openapi-sampler@^1.5.0, openapi-sampler@^1.6.1:
   version "1.6.1"
   resolved "https://registry.npmjs.org/openapi-sampler/-/openapi-sampler-1.6.1.tgz"
