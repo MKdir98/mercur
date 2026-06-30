@@ -22,7 +22,7 @@ export const POST = async (
 
   const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
   const results = await translationsService.listTranslations({
-    filters: { entity_type, entity_id, field_name },
+    entity_type, entity_id, field_name,
   })
 
   res.status(201).json({ translation: results[0] ?? null })

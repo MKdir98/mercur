@@ -66,7 +66,7 @@ export async function generateEntityTranslation(
   const translationsService = container.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
 
   const existing = await translationsService.listTranslations({
-    filters: { entity_type, entity_id, field_name },
+    entity_type, entity_id, field_name,
   })
 
   if (existing.length > 0) {

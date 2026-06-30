@@ -100,6 +100,54 @@ export const useDeleteTranslation = (
   })
 }
 
+export const useGenerateTranslation = (
+  options?: UseMutationOptions<
+    { translation?: Translation },
+    Error,
+    { entity_type: string; entity_id: string; field_name: string }
+  >
+) => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload) =>
+      mercurQuery('/admin/translations/generate', {
+        method: 'POST',
+        body: payload
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: translationsQueryKeys.lists() })
+    },
+    ...options
+  })
+}
+
+export const useEntityTranslations = (
+  entity_type: string,
+  entity_id: string,
+  options?: Omit<
+    UseQueryOptions<
+      Record<string, unknown>,
+      Error,
+      { translations: Translation[] },
+      QueryKey
+    >,
+    'queryFn' | 'queryKey'
+  >
+) => {
+  const { data, ...other } = useQuery({
+    queryKey: translationsQueryKeys.list({ entity_type, entity_id }),
+    queryFn: () =>
+      mercurQuery('/admin/translations', {
+        method: 'GET',
+        query: { entity_type, entity_id, limit: 20 }
+      }),
+    enabled: !!entity_id,
+    ...options
+  })
+
+  return { translations: (data as any)?.translations as Translation[] | undefined, ...other }
+}
+
 export const useImportTranslations = (
   options?: UseMutationOptions<
     { created: number; updated: number; total: number },

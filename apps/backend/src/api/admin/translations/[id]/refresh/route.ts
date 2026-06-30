@@ -16,7 +16,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
   const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
 
-  const existing = await translationsService.listTranslations({ filters: { id } })
+  const existing = await translationsService.listTranslations({ id })
   const record = existing[0]
 
   if (!record) {
@@ -36,7 +36,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     field_name: record.field_name,
   })
 
-  const updated = await translationsService.listTranslations({ filters: { id } })
+  const updated = await translationsService.listTranslations({ id })
 
   res.json({ translation: updated[0] ?? null })
 }

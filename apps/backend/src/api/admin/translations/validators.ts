@@ -6,7 +6,13 @@ export type AdminGetTranslationsParamsType = z.infer<typeof AdminGetTranslations
 export const AdminGetTranslationsParams = createFindParams({
   offset: 0,
   limit: 50
-})
+}).merge(
+  z.object({
+    entity_type: z.string().optional(),
+    entity_id: z.string().optional(),
+    field_name: z.string().optional(),
+  })
+)
 
 const EntityType = z.enum(['product', 'seller', 'category'])
 

@@ -12,6 +12,26 @@ import { queryKeysFactory } from '../../lib/query-keys-factory'
 
 export const productQueryKeys = queryKeysFactory('product')
 
+export const useProducts = (
+  query?: Record<string, string | number>,
+  options?: Omit<
+    UseQueryOptions<unknown, Error, { products: any[]; count: number }, QueryKey>,
+    'queryFn' | 'queryKey'
+  >
+) => {
+  const { data, ...other } = useQuery({
+    queryKey: productQueryKeys.list(query),
+    queryFn: () =>
+      mercurQuery('/admin/products', {
+        method: 'GET',
+        query
+      }),
+    ...options
+  })
+
+  return { ...data, ...other }
+}
+
 export const useProduct = (
   id: string,
   query?: any,

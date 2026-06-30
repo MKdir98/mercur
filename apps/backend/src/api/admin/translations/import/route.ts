@@ -47,9 +47,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const updated: Array<{ id: string; source_text: string; translated_text: string }> = []
 
   for (const [source_text, translated_text] of rows) {
-    const existing = await translationsService.listTranslations({
-      filters: { source_text }
-    })
+    const existing = await translationsService.listTranslations({ source_text })
 
     if (existing.length > 0) {
       const result = await translationsService.updateTranslations({

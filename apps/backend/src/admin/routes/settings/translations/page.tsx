@@ -2,7 +2,6 @@ import { defineRouteConfig } from "@medusajs/admin-sdk";
 import {
   Button,
   Container,
-  Drawer,
   Heading,
   Table,
   Text,
@@ -12,10 +11,14 @@ import {
   useTranslations,
   useDeleteTranslation,
   useImportTranslations,
+  useGenerateTranslation,
 } from "../../../hooks/api/translations";
+import { useProductCategories } from "../../../hooks/api/product_category";
 import { useState, useRef } from "react";
 import CreateTranslationForm from "./components/create-translation-form";
 import EditTranslationForm from "./components/edit-translation-form";
+import { Drawer } from "@medusajs/ui";
+import { mercurQuery } from "../../../lib/client";
 
 const CSV_SAMPLE = `en,fa
 "Product A","محصول آ"
@@ -24,6 +27,12 @@ const CSV_SAMPLE = `en,fa
 "We are a premium fashion brand","ما یک برند مد ممتاز هستیم"
 "High quality products for everyone","محصولات با کیفیت بالا برای همه"
 `;
+
+type BackfillProgress = {
+  done: number
+  total: number
+  failed: number
+} | null
 
 const TranslationsPage = () => {
   const [createOpen, setCreateOpen] = useState(false);
@@ -34,11 +43,15 @@ const TranslationsPage = () => {
     translated_text: string;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [backfillProgress, setBackfillProgress] = useState<BackfillProgress>(null)
+  const [backfillRunning, setBackfillRunning] = useState(false)
 
   const { translations, isLoading, refetch } = useTranslations({});
   const { mutateAsync: deleteTranslation } = useDeleteTranslation({});
   const { mutateAsync: importTranslations, isPending: isImporting } =
     useImportTranslations({});
+  const { mutateAsync: generate } = useGenerateTranslation()
+  const { product_categories } = useProductCategories()
 
   const handleEdit = (t: { id: string; source_text: string; translated_text: string }) => {
     setEditingTranslation(t);
@@ -84,6 +97,118 @@ const TranslationsPage = () => {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const backfillCategories = async () => {
+    const cats = (product_categories ?? []) as { id: string; name: string }[]
+    if (!cats.length) { toast.warning("No categories found"); return }
+    if (!confirm(`Generate translations for ${cats.length} categories?`)) return
+
+    setBackfillRunning(true)
+    setBackfillProgress({ done: 0, total: cats.length, failed: 0 })
+
+    let failed = 0
+    for (const cat of cats) {
+      try {
+        await generate({ entity_type: "category", entity_id: cat.id, field_name: "name" })
+      } catch {
+        failed++
+      }
+      setBackfillProgress((p) => p ? { ...p, done: p.done + 1, failed } : null)
+    }
+
+    setBackfillRunning(false)
+    toast.success(`Categories: ${cats.length - failed} translated, ${failed} failed`)
+    refetch()
+  }
+
+  const backfillSellers = async () => {
+    if (!confirm("Generate translations for all existing sellers? Continue?")) return
+
+    setBackfillRunning(true)
+
+    let allSellers: { id: string }[] = []
+    try {
+      let offset = 0
+      const limit = 100
+      const first: any = await mercurQuery('/admin/sellers', { method: 'GET', query: { limit, offset, fields: 'id' } })
+      const total = first.count ?? 0
+      allSellers = first.sellers ?? []
+      while (allSellers.length < total) {
+        offset += limit
+        const page: any = await mercurQuery('/admin/sellers', { method: 'GET', query: { limit, offset, fields: 'id' } })
+        allSellers = [...allSellers, ...(page.sellers ?? [])]
+      }
+    } catch {
+      toast.error("Failed to fetch sellers")
+      setBackfillRunning(false)
+      return
+    }
+
+    const taskTotal = allSellers.length
+    setBackfillProgress({ done: 0, total: taskTotal, failed: 0 })
+
+    let failed = 0
+    for (const seller of allSellers) {
+      for (const field_name of ["description"]) {
+        try {
+          await generate({ entity_type: "seller", entity_id: seller.id, field_name })
+        } catch {
+          failed++
+        }
+        setBackfillProgress((p) => p ? { ...p, done: p.done + 1, failed } : null)
+      }
+    }
+
+    setBackfillRunning(false)
+    toast.success(`Sellers: ${taskTotal - failed} translations generated, ${failed} failed`)
+    refetch()
+  }
+
+  const backfillProducts = async () => {
+    if (!confirm("This will generate translations for all existing products. Continue?")) return
+
+    setBackfillRunning(true)
+
+    // Fetch all products (paginated, 100 per page)
+    let offset = 0
+    const limit = 100
+    let total = 0
+    let allProducts: { id: string }[] = []
+
+    try {
+      const first: any = await mercurQuery('/admin/products', { method: 'GET', query: { limit, offset, fields: 'id' } })
+      total = first.count ?? 0
+      allProducts = first.products ?? []
+      while (allProducts.length < total) {
+        offset += limit
+        const page: any = await mercurQuery('/admin/products', { method: 'GET', query: { limit, offset, fields: 'id' } })
+        allProducts = [...allProducts, ...(page.products ?? [])]
+      }
+    } catch {
+      toast.error("Failed to fetch products")
+      setBackfillRunning(false)
+      return
+    }
+
+    const taskTotal = allProducts.length * 2 // title + description
+    setBackfillProgress({ done: 0, total: taskTotal, failed: 0 })
+
+    let failed = 0
+    for (const product of allProducts) {
+      for (const field_name of ["title", "description"]) {
+        try {
+          await generate({ entity_type: "product", entity_id: product.id, field_name })
+        } catch {
+          failed++
+        }
+        setBackfillProgress((p) => p ? { ...p, done: p.done + 1, failed } : null)
+      }
+    }
+
+    setBackfillRunning(false)
+    toast.success(`Products: ${taskTotal - failed} translations generated, ${failed} failed`)
+    refetch()
+  }
 
   return (
     <Container>
@@ -133,6 +258,45 @@ const TranslationsPage = () => {
           </Drawer>
         </div>
       </div>
+
+      {/* Bulk backfill */}
+      <div className="flex items-center gap-3 border-t px-6 py-4">
+        <Text size="small" className="text-ui-fg-subtle mr-2">Backfill existing:</Text>
+        <Button
+          size="small"
+          variant="secondary"
+          isLoading={backfillRunning}
+          disabled={backfillRunning}
+          onClick={backfillCategories}
+        >
+          All categories
+        </Button>
+        <Button
+          size="small"
+          variant="secondary"
+          isLoading={backfillRunning}
+          disabled={backfillRunning}
+          onClick={backfillProducts}
+        >
+          All products
+        </Button>
+        <Button
+          size="small"
+          variant="secondary"
+          isLoading={backfillRunning}
+          disabled={backfillRunning}
+          onClick={backfillSellers}
+        >
+          All sellers
+        </Button>
+        {backfillProgress && (
+          <Text size="small" className="text-ui-fg-subtle">
+            {backfillProgress.done}/{backfillProgress.total}
+            {backfillProgress.failed > 0 && ` (${backfillProgress.failed} failed)`}
+          </Text>
+        )}
+      </div>
+
       <div className="flex size-full flex-col overflow-hidden">
         {isLoading && <Text>Loading...</Text>}
         <Table>
