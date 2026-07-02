@@ -55,6 +55,7 @@ export const AdminGenerateTranslation = z.object({
   entity_type: EntityType,
   entity_id: z.string().min(1),
   field_name: z.string().min(1),
+  force: z.boolean().optional(),
 }).refine(
   (data) => VALID_FIELDS[data.entity_type]?.includes(data.field_name) ?? false,
   { message: 'Invalid field_name for the given entity_type' }

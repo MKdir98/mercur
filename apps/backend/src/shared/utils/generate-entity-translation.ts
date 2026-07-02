@@ -22,22 +22,40 @@ type GenerateParams = {
   entity_type: string
   entity_id: string
   field_name: string
+  /** Overwrite a manually edited translation. Defaults to false. */
+  force?: boolean
 }
+
+export type GenerateTranslationStatus =
+  | 'created'
+  | 'updated'
+  | 'skipped_manual'
+  | 'skipped'
 
 export async function generateEntityTranslation(
   container: MedusaContainer,
   params: GenerateParams
-): Promise<void> {
-  const { entity_type, entity_id, field_name } = params
+): Promise<GenerateTranslationStatus> {
+  const { entity_type, entity_id, field_name, force = false } = params
 
   const apiKey = process.env.FREELLMAPI_KEY
   if (!apiKey) {
     console.warn('[translation] FREELLMAPI_KEY not set — skipping translation generation')
-    return
+    return 'skipped'
   }
 
   const entityConfig = ENTITY_QUERY_MAP[entity_type]
-  if (!entityConfig) return
+  if (!entityConfig) return 'skipped'
+
+  const translationsService = container.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
+
+  const existing = await translationsService.listTranslations({
+    entity_type, entity_id, field_name,
+  })
+
+  if (existing[0]?.manually_edited && !force) {
+    return 'skipped_manual'
+  }
 
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const { data } = await query.graph({
@@ -47,7 +65,7 @@ export async function generateEntityTranslation(
   })
 
   const entityText: string | undefined = data?.[0]?.[field_name]
-  if (!entityText) return
+  if (!entityText) return 'skipped'
 
   const llmClient = new FreeLLMApiClient({
     apiKey,
@@ -63,25 +81,22 @@ export async function generateEntityTranslation(
   const source_text = isPersianInput ? generatedText : entityText
   const translated_text = isPersianInput ? entityText : generatedText
 
-  const translationsService = container.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
-
-  const existing = await translationsService.listTranslations({
-    entity_type, entity_id, field_name,
-  })
-
   if (existing.length > 0) {
     await translationsService.updateTranslations({
       id: existing[0].id,
       source_text,
       translated_text,
+      manually_edited: false,
     })
-  } else {
-    await translationsService.createTranslations({
-      source_text,
-      translated_text,
-      entity_type,
-      entity_id,
-      field_name,
-    })
+    return 'updated'
   }
+
+  await translationsService.createTranslations({
+    source_text,
+    translated_text,
+    entity_type,
+    entity_id,
+    field_name,
+  })
+  return 'created'
 }

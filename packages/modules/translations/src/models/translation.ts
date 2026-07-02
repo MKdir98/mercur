@@ -7,4 +7,5 @@ export const Translation = model.define("translation", {
   entity_type: model.text().nullable(),
   entity_id: model.text().nullable(),
   field_name: model.text().nullable(),
+  manually_edited: model.boolean().default(false),
 });

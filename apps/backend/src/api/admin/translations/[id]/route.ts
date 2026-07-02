@@ -9,7 +9,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
 
   const { data: translations } = await query.graph({
     entity: 'translation',
-    fields: ['id', 'source_text', 'translated_text'],
+    fields: ['id', 'source_text', 'translated_text', 'entity_type', 'entity_id', 'field_name', 'manually_edited'],
     filters: { id: req.params.id }
   })
 
@@ -31,7 +31,8 @@ export const POST = async (
 
   const result = await translationsService.updateTranslations({
     id: req.params.id,
-    ...req.validatedBody
+    ...req.validatedBody,
+    manually_edited: true
   })
   const translation = Array.isArray(result) ? result[0] : result
 

@@ -32,44 +32,14 @@ import {
 } from '@medusajs/types'
 
 import { getParsianGatewayUrls, type ParsianGatewayUrls } from '../parsian-urls'
-import { logExternalServiceCall } from '@mercurjs/framework'
+import {
+  computeIranGatewayRialAmount,
+  logExternalServiceCall,
+} from '@mercurjs/framework'
 
 type Options = {
   loginAccount: string
   sandbox: boolean
-}
-
-
-const toNumber = (val: unknown): number => {
-  if (val == null) return 0
-  if (typeof val === 'number') return val
-  if (typeof val === 'object' && val !== null && 'numeric_' in val)
-    return (val as { numeric_?: number }).numeric_ ?? 0
-  if (
-    typeof val === 'object' &&
-    val !== null &&
-    typeof (val as { toNumber?: () => number }).toNumber === 'function'
-  )
-    return (val as { toNumber: () => number }).toNumber()
-  return Number(val) || 0
-}
-
-function computeGatewayAmount(
-  fallbackAmount: number,
-  cart: Record<string, unknown> | undefined
-): number {
-  if (!cart || typeof cart !== 'object') return fallbackAmount
-  const countryCode = (
-    cart.shipping_address as { country_code?: string } | undefined
-  )?.country_code?.toLowerCase?.()
-  if (countryCode !== 'ir') return fallbackAmount
-  const itemSubtotal = toNumber(cart.item_subtotal)
-  const shippingTotal = toNumber(cart.shipping_total)
-  const taxTotal = toNumber(cart.tax_total)
-  const vatAmount = taxTotal
-  const computedAmount = itemSubtotal + shippingTotal + vatAmount
-  if (computedAmount <= 0) return fallbackAmount
-  return computedAmount
 }
 
 function escapeXml(s: string): string {
@@ -173,7 +143,9 @@ abstract class ParsianProvider extends AbstractPaymentProvider<Options> {
     const cart = (ctx?.cart ??
       data?.cart ??
       (ctx && 'items' in ctx ? ctx : undefined)) as Record<string, unknown> | undefined
-    const numericAmount = Math.floor(computeGatewayAmount(fallbackAmount, cart))
+    const numericAmount = Math.floor(
+      computeIranGatewayRialAmount('Parsian', fallbackAmount, currency_code, cart)
+    )
 
     const orderId = Math.floor(Date.now() / 1000) * 100000 + Math.floor(Math.random() * 99999)
     const cartId = (providerData?.cart_id as string) || ''

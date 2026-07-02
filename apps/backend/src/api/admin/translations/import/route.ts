@@ -45,11 +45,16 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
   const created: Array<{ id: string; source_text: string; translated_text: string }> = []
   const updated: Array<{ id: string; source_text: string; translated_text: string }> = []
+  let skipped = 0
 
   for (const [source_text, translated_text] of rows) {
     const existing = await translationsService.listTranslations({ source_text })
 
     if (existing.length > 0) {
+      if (existing[0].manually_edited) {
+        skipped++
+        continue
+      }
       const result = await translationsService.updateTranslations({
         id: existing[0].id,
         translated_text
@@ -69,6 +74,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   res.status(201).json({
     created: created.length,
     updated: updated.length,
+    skipped,
     total: rows.length,
     translations: [...created, ...updated]
   })

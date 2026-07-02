@@ -30,36 +30,14 @@ import {
   UpdatePaymentInput,
   UpdatePaymentOutput,
 } from '@medusajs/types'
-import { logExternalServiceCall } from '@mercurjs/framework'
+import {
+  computeIranGatewayRialAmount,
+  logExternalServiceCall,
+} from '@mercurjs/framework'
 
 type Options = {
   merchantId: string
   sandbox: boolean
-}
-
-
-const toNumber = (val: unknown): number => {
-  if (val == null) return 0
-  if (typeof val === 'number') return val
-  if (typeof val === 'object' && val !== null && 'numeric_' in val) return (val as { numeric_?: number }).numeric_ ?? 0
-  if (typeof val === 'object' && val !== null && typeof (val as { toNumber?: () => number }).toNumber === 'function') return (val as { toNumber: () => number }).toNumber()
-  return Number(val) || 0
-}
-
-function computeGatewayAmount(
-  fallbackAmount: number,
-  cart: Record<string, unknown> | undefined
-): number {
-  if (!cart || typeof cart !== 'object') return fallbackAmount
-  const countryCode = (cart.shipping_address as { country_code?: string } | undefined)?.country_code?.toLowerCase?.()
-  if (countryCode !== 'ir') return fallbackAmount
-  const itemSubtotal = toNumber(cart.item_subtotal)
-  const shippingTotal = toNumber(cart.shipping_total)
-  const taxTotal = toNumber(cart.tax_total)
-  const vatAmount = taxTotal
-  const computedAmount = itemSubtotal + shippingTotal + vatAmount
-  if (computedAmount <= 0) return fallbackAmount
-  return computedAmount
 }
 
 abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
@@ -124,7 +102,12 @@ abstract class ZarinpalProvider extends AbstractPaymentProvider<Options> {
     const fallbackAmount = typeof amount === 'number' ? amount : parseFloat(amount as string)
     const ctx = context as Record<string, unknown> | undefined
     const cart = (ctx?.cart ?? data?.cart ?? (ctx && 'items' in ctx ? ctx : undefined)) as Record<string, unknown> | undefined
-    const numericAmount = computeGatewayAmount(fallbackAmount, cart)
+    const numericAmount = computeIranGatewayRialAmount(
+      'Zarinpal',
+      fallbackAmount,
+      currency_code,
+      cart
+    )
 
     const endpoint = `${this.baseUrl}/request.json`
     const requestBody = {

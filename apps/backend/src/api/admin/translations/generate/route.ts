@@ -9,7 +9,7 @@ export const POST = async (
   req: MedusaRequest<AdminGenerateTranslationType>,
   res: MedusaResponse
 ) => {
-  const { entity_type, entity_id, field_name } = req.validatedBody
+  const { entity_type, entity_id, field_name, force } = req.validatedBody
 
   if (!process.env.FREELLMAPI_KEY) {
     throw new MedusaError(
@@ -18,12 +18,16 @@ export const POST = async (
     )
   }
 
-  await generateEntityTranslation(req.scope, { entity_type, entity_id, field_name })
+  const status = await generateEntityTranslation(req.scope, { entity_type, entity_id, field_name, force })
 
   const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
   const results = await translationsService.listTranslations({
     entity_type, entity_id, field_name,
   })
+
+  if (status === 'skipped_manual') {
+    return res.status(200).json({ translation: results[0] ?? null, skipped: true, reason: 'manually_edited' })
+  }
 
   res.status(201).json({ translation: results[0] ?? null })
 }

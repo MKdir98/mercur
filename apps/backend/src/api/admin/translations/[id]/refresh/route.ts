@@ -30,13 +30,20 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     )
   }
 
-  await generateEntityTranslation(req.scope, {
+  const force = (req.body as { force?: boolean } | undefined)?.force === true
+
+  const status = await generateEntityTranslation(req.scope, {
     entity_type: record.entity_type,
     entity_id: record.entity_id,
     field_name: record.field_name,
+    force,
   })
 
   const updated = await translationsService.listTranslations({ id })
+
+  if (status === 'skipped_manual') {
+    return res.json({ translation: updated[0] ?? null, skipped: true, reason: 'manually_edited' })
+  }
 
   res.json({ translation: updated[0] ?? null })
 }

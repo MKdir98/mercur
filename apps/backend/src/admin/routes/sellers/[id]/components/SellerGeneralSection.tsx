@@ -1,53 +1,19 @@
-import { Button, Container, Divider, Heading, Text, toast, usePrompt } from "@medusajs/ui";
+import { Container, Divider, Heading, Text, usePrompt } from "@medusajs/ui";
 import { SellerStatusBadge } from "../../../../components/seller-status-badge/SellerStatusBagde";
 import { ActionsButton } from "../../../../common/ActionsButton";
 import { PencilSquare, User } from "@medusajs/icons";
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUpdateSeller } from "../../../../hooks/api/seller";
-import { useEntityTranslations, useGenerateTranslation } from "../../../../hooks/api/translations";
+import { EntityTranslationsSection, TranslationField } from "../../../../components/entity-translations/EntityTranslationsSection";
 
-const SELLER_FIELDS = [
-  { field_name: "description", label: "Description" },
+const SELLER_FIELDS: TranslationField[] = [
+  { field_name: "description", label: "Description", multiline: true },
 ]
 
 export const SellerGeneralSection = ({ seller }: { seller: any }) => {
 
   const navigate = useNavigate();
   const { mutateAsync: suspendSeller } = useUpdateSeller();
-  const { mutateAsync: generate } = useGenerateTranslation();
-  const { translations, refetch: refetchTranslations } = useEntityTranslations("seller", seller.id)
-  const [loadingField, setLoadingField] = useState<string | null>(null)
-
-  const translationByField = (field_name: string) =>
-    translations?.find((t) => t.field_name === field_name)
-
-  const handleTranslate = async (field_name: string) => {
-    setLoadingField(field_name)
-    try {
-      await generate({ entity_type: "seller", entity_id: seller.id, field_name })
-      toast.success(`Translation generated for ${field_name}`)
-      refetchTranslations()
-    } catch {
-      toast.error(`Failed to generate translation for ${field_name}`)
-    } finally {
-      setLoadingField(null)
-    }
-  }
-
-  const handleTranslateAll = async () => {
-    setLoadingField("all")
-    const results = await Promise.allSettled(
-      SELLER_FIELDS.map(({ field_name }) =>
-        generate({ entity_type: "seller", entity_id: seller.id, field_name })
-      )
-    )
-    setLoadingField(null)
-    refetchTranslations()
-    const failed = results.filter((r) => r.status === "rejected").length
-    if (failed === 0) toast.success("All seller translations generated")
-    else toast.error(`${failed}/${results.length} translations failed`)
-  }
 
   const dialog = usePrompt()
   
@@ -161,55 +127,12 @@ export const SellerGeneralSection = ({ seller }: { seller: any }) => {
           </div>
         </Container>
       </div>
-      <Container className="divide-y p-0 mt-4">
-        <div className="flex items-center justify-between px-6 py-4">
-          <Heading level="h2">Translations</Heading>
-        </div>
-        {SELLER_FIELDS.map(({ field_name, label }) => {
-          const t = translationByField(field_name)
-          return (
-            <div key={field_name} className="px-6 py-4 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <Text className="font-medium">{label}</Text>
-                <Button
-                  variant="transparent"
-                  size="small"
-                  isLoading={loadingField === field_name}
-                  disabled={loadingField !== null}
-                  onClick={() => handleTranslate(field_name)}
-                >
-                  {t ? "Refresh" : "Generate"}
-                </Button>
-              </div>
-              {t ? (
-                <div className="flex flex-col gap-1 text-sm">
-                  <div className="flex gap-2">
-                    <span className="text-ui-fg-muted w-8 shrink-0">EN</span>
-                    <span className="text-ui-fg-base break-words min-w-0">{t.source_text}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-ui-fg-muted w-8 shrink-0">FA</span>
-                    <span className="text-ui-fg-base break-words min-w-0" dir="rtl">{t.translated_text}</span>
-                  </div>
-                </div>
-              ) : (
-                <Text size="small" className="text-ui-fg-muted">No translation yet</Text>
-              )}
-            </div>
-          )
-        })}
-        <div className="px-6 py-4">
-          <Button
-            variant="secondary"
-            size="small"
-            isLoading={loadingField === "all"}
-            disabled={loadingField !== null}
-            onClick={handleTranslateAll}
-          >
-            Generate All
-          </Button>
-        </div>
-      </Container>
+      <EntityTranslationsSection
+        entityType="seller"
+        entityId={seller.id}
+        fields={SELLER_FIELDS}
+        className="mt-4"
+      />
     </>
   );
 };

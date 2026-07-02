@@ -34,7 +34,10 @@ type BackfillProgress = {
   failed: number
 } | null
 
+const PAGE_SIZE = 50;
+
 const TranslationsPage = () => {
+  const [currentPage, setCurrentPage] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingTranslation, setEditingTranslation] = useState<{
@@ -46,7 +49,10 @@ const TranslationsPage = () => {
   const [backfillProgress, setBackfillProgress] = useState<BackfillProgress>(null)
   const [backfillRunning, setBackfillRunning] = useState(false)
 
-  const { translations, isLoading, refetch } = useTranslations({});
+  const { translations, count, isLoading, refetch } = useTranslations({
+    limit: PAGE_SIZE,
+    offset: currentPage * PAGE_SIZE,
+  });
   const { mutateAsync: deleteTranslation } = useDeleteTranslation({});
   const { mutateAsync: importTranslations, isPending: isImporting } =
     useImportTranslations({});
@@ -63,6 +69,9 @@ const TranslationsPage = () => {
     try {
       await deleteTranslation(id);
       toast.success("Deleted");
+      if (translations?.length === 1 && currentPage > 0) {
+        setCurrentPage(currentPage - 1);
+      }
       refetch();
     } catch {
       toast.error("Delete failed");
@@ -334,6 +343,17 @@ const TranslationsPage = () => {
             ))}
           </Table.Body>
         </Table>
+        <Table.Pagination
+          className="w-full"
+          canNextPage={PAGE_SIZE * (currentPage + 1) < (count || 0)}
+          canPreviousPage={currentPage > 0}
+          previousPage={() => setCurrentPage(currentPage - 1)}
+          nextPage={() => setCurrentPage(currentPage + 1)}
+          count={count || 0}
+          pageCount={Math.ceil((count || 0) / PAGE_SIZE)}
+          pageIndex={currentPage}
+          pageSize={PAGE_SIZE}
+        />
       </div>
       <Drawer open={editOpen} onOpenChange={setEditOpen}>
         <Drawer.Content>

@@ -120,7 +120,16 @@ module.exports = defineConfig({
                     secret_access_key: process.env.S3_FILE_SECRET_ACCESS_KEY,
                     region: process.env.S3_FILE_REGION,          // e.g. eu-central-1
                     bucket: process.env.S3_FILE_BUCKET,
-                    prefix: process.env.S3_FILE_PREFIX || ''     // optional subfolder inside the bucket
+                    prefix: process.env.S3_FILE_PREFIX || '',    // optional subfolder inside the bucket
+                    // Set only for S3-compatible storage (MinIO, ParsPack, Arvan, ...); leave unset for AWS.
+                    // These providers need path-style URLs (endpoint/bucket/key) — virtual-host DNS doesn't exist there.
+                    ...(process.env.S3_FILE_ENDPOINT
+                      ? {
+                          endpoint: process.env.S3_FILE_ENDPOINT,
+                          additional_client_config: { forcePathStyle: true }
+                        }
+                      : {}),
+                    cache_control: process.env.S3_FILE_CACHE_CONTROL || 'public, max-age=31536000, immutable'
                   }
                 }
               ]

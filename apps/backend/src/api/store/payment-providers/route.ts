@@ -75,28 +75,23 @@ export async function GET(
   const baseFields = req.queryConfig?.fields?.length
     ? req.queryConfig.fields
     : ["id", "is_enabled"]
-  const fields = baseFields.map((f) => `payment_provider.${f}`)
 
   const pagination = req.queryConfig?.pagination ?? { skip: 0 }
 
+  // Payment methods are shown store-wide regardless of the cart's region;
+  // region_payment_provider links are intentionally not used to scope this list.
   const queryObject = remoteQueryObjectFromString({
-    entryPoint: "region_payment_provider",
+    entryPoint: "payment_provider",
     variables: {
       filters: {
-        region_id: regionId,
+        is_enabled: true,
       },
       ...pagination,
     },
-    fields,
+    fields: baseFields,
   })
 
-  const { rows: regionPaymentProvidersRelation, metadata } =
-    await remoteQuery(queryObject)
-
-  const paymentProviders = regionPaymentProvidersRelation.map(
-    (relation: { payment_provider: { id: string; is_enabled?: boolean } }) =>
-      relation.payment_provider
-  )
+  const { rows: paymentProviders, metadata } = await remoteQuery(queryObject)
 
   const filtered = applyGatewayEnvFilter(paymentProviders, {
     requestQueryRegionId: regionId,

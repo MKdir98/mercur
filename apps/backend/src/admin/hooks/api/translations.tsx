@@ -23,7 +23,7 @@ export const useTranslations = (
     UseQueryOptions<
       Record<string, string | number>,
       Error,
-      { translations: Translation[] },
+      { translations: Translation[]; count: number; offset: number; limit: number },
       QueryKey
     >,
     'queryFn' | 'queryKey'
@@ -36,6 +36,7 @@ export const useTranslations = (
         method: 'GET',
         query
       }),
+    placeholderData: (prev) => prev,
     ...options
   })
 
@@ -102,9 +103,9 @@ export const useDeleteTranslation = (
 
 export const useGenerateTranslation = (
   options?: UseMutationOptions<
-    { translation?: Translation },
+    { translation?: Translation; skipped?: boolean; reason?: string },
     Error,
-    { entity_type: string; entity_id: string; field_name: string }
+    { entity_type: string; entity_id: string; field_name: string; force?: boolean }
   >
 ) => {
   const queryClient = useQueryClient()
@@ -150,7 +151,7 @@ export const useEntityTranslations = (
 
 export const useImportTranslations = (
   options?: UseMutationOptions<
-    { created: number; updated: number; total: number },
+    { created: number; updated: number; skipped?: number; total: number },
     Error,
     File
   >

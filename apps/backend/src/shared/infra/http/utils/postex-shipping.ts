@@ -4,6 +4,7 @@ import { createShippingProfilesWorkflow } from '@medusajs/medusa/core-flows'
 
 import { SELLER_MODULE } from '@mercurjs/seller'
 
+import sellerShippingOptionLink from '../../../../links/seller-shipping-option'
 import sellerShippingProfileLink from '../../../../links/seller-shipping-profile'
 import sellerStockLocationLink from '../../../../links/seller-stock-location'
 
@@ -25,6 +26,7 @@ export async function ensureSellerPostexShipping(
       'stock_location.fulfillment_sets.id',
       'stock_location.fulfillment_sets.type',
       'stock_location.fulfillment_sets.service_zones.id',
+      'stock_location.fulfillment_sets.service_zones.shipping_options.id',
       'stock_location.fulfillment_sets.service_zones.shipping_options.provider_id'
     ],
     filters: { seller_id: sellerId }
@@ -40,17 +42,49 @@ export async function ensureSellerPostexShipping(
 
   console.log(`🔧 [POSTEX SETUP] currentLocation:`, currentLocation?.id, 'fulfillment_sets:', currentLocation?.fulfillment_sets?.length ?? 0)
 
-  const locationHasPostex = currentLocation?.fulfillment_sets?.some((fs: any) =>
-    fs.service_zones?.some((sz: any) =>
-      sz.shipping_options?.some((so: any) =>
-        so.provider_id?.includes('postex_postex')
-      )
-    )
+  const postexShippingOptionsOnLocation = (currentLocation?.fulfillment_sets ?? [])
+    .flatMap((fs: any) => fs.service_zones ?? [])
+    .flatMap((sz: any) => sz.shipping_options ?? [])
+    .filter((so: any) => so.provider_id?.includes('postex_postex'))
+
+  // A shipping option can exist on the location's fulfillment set while the
+  // seller's ownership link to it is soft-deleted (e.g. left over from a
+  // failed/duplicate setup attempt) — in that case the option is invisible
+  // to the seller even though it's fully functional. Check the link itself
+  // rather than trusting the raw fulfillment relations.
+  let activePostexShippingOptionId: string | undefined
+  if (postexShippingOptionsOnLocation.length) {
+    const { data: activeLinks } = await query.graph({
+      entity: sellerShippingOptionLink.entryPoint,
+      fields: ['shipping_option_id'],
+      filters: {
+        seller_id: sellerId,
+        shipping_option_id: postexShippingOptionsOnLocation.map((so: any) => so.id),
+        deleted_at: { $eq: null }
+      }
+    })
+    activePostexShippingOptionId = (activeLinks[0] as any)?.shipping_option_id
+  }
+
+  console.log(
+    `🔧 [POSTEX SETUP] postexShippingOptionsOnLocation=${postexShippingOptionsOnLocation.length} activeLink=${activePostexShippingOptionId ?? 'none'}`
   )
 
-  console.log(`🔧 [POSTEX SETUP] locationHasPostex=${locationHasPostex}`)
+  if (activePostexShippingOptionId) return
 
-  if (locationHasPostex) return
+  if (postexShippingOptionsOnLocation.length) {
+    // The shipping option/service zone/fulfillment set already exist and are
+    // fine — only the seller's link to the shipping option is dead. Repair
+    // it instead of creating a duplicate shipping option.
+    console.log(
+      `🔧 [POSTEX SETUP] repairing dead seller-shipping-option link for ${postexShippingOptionsOnLocation[0].id}`
+    )
+    await remoteLink.create({
+      [SELLER_MODULE]: { seller_id: sellerId },
+      [Modules.FULFILLMENT]: { shipping_option_id: postexShippingOptionsOnLocation[0].id }
+    })
+    return
+  }
 
   // Get or create fulfillment set
   let fulfillmentSetId: string
