@@ -21,7 +21,8 @@ export async function sendOtpEmail(
     return { success: false, error: "فرمت ایمیل صحیح نیست" }
   }
 
-  if (process.env.OTP_EMAIL_DEBUG === "true") {
+  const isProduction = (process.env.APP_ENV || "production") === "production"
+  if (!isProduction || process.env.OTP_EMAIL_DEBUG === "true") {
     console.info(`[OTP_EMAIL_DEBUG] to=${recipient} code=${code}`)
     return { success: true }
   }

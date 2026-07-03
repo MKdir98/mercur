@@ -6,25 +6,10 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import { Client } from "pg"
 
-async function getCustomerIdFromToken(req: MedusaRequest): Promise<string | null> {
-  const authHeader = req.headers.authorization
-  
-  if (!authHeader) {
-    return null
-  }
-
-  const token = authHeader.replace("Bearer ", "")
-  
-  if (token.startsWith("cust_")) {
-    const withoutPrefix = token.substring(5)
-    const lastUnderscoreIndex = withoutPrefix.lastIndexOf("_")
-    
-    if (lastUnderscoreIndex > 0) {
-      return withoutPrefix.substring(0, lastUnderscoreIndex)
-    }
-  }
-
-  return null
+// auth_context is populated by the resolveCustomTokenAuth middleware on /store/*,
+// which verifies the signed `cust.<payload>.<sig>` bearer token or the session.
+function getCustomerIdFromToken(req: MedusaRequest): string | null {
+  return (req as { auth_context?: { actor_id?: string } }).auth_context?.actor_id ?? null
 }
 
 /**

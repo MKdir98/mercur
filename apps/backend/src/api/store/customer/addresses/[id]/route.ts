@@ -6,25 +6,23 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import { Client } from "pg"
 
-async function getCustomerIdFromToken(req: MedusaRequest): Promise<string | null> {
-  const authHeader = req.headers.authorization
-  
-  if (!authHeader) {
-    return null
-  }
+// auth_context is populated by the resolveCustomTokenAuth middleware on /store/*,
+// which verifies the signed `cust.<payload>.<sig>` bearer token or the session.
+function getCustomerIdFromToken(req: MedusaRequest): string | null {
+  return (req as { auth_context?: { actor_id?: string } }).auth_context?.actor_id ?? null
+}
 
-  const token = authHeader.replace("Bearer ", "")
-  
-  if (token.startsWith("cust_")) {
-    const withoutPrefix = token.substring(5)
-    const lastUnderscoreIndex = withoutPrefix.lastIndexOf("_")
-    
-    if (lastUnderscoreIndex > 0) {
-      return withoutPrefix.substring(0, lastUnderscoreIndex)
-    }
-  }
-
-  return null
+async function customerOwnsAddress(
+  req: MedusaRequest,
+  customerId: string,
+  addressId: string
+): Promise<boolean> {
+  const customerModule = req.scope.resolve(Modules.CUSTOMER)
+  const addresses = await customerModule.listCustomerAddresses({
+    id: addressId,
+    customer_id: customerId,
+  })
+  return addresses.length > 0
 }
 
 /**
@@ -76,7 +74,14 @@ export async function POST(
     }
 
     const addressId = req.params.id
-    
+
+    if (!(await customerOwnsAddress(req, customerId, addressId))) {
+      res.status(404).json({
+        message: "Address not found",
+      })
+      return
+    }
+
     const addressData = req.body as {
       address_name?: string
       first_name?: string
@@ -215,6 +220,13 @@ export async function DELETE(
     }
 
     const addressId = req.params.id
+
+    if (!(await customerOwnsAddress(req, customerId, addressId))) {
+      res.status(404).json({
+        message: "Address not found",
+      })
+      return
+    }
 
     const customerModule = req.scope.resolve(Modules.CUSTOMER)
     await customerModule.deleteCustomerAddresses([addressId])

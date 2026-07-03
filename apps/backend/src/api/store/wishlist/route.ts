@@ -15,20 +15,9 @@ import { storeWishlistFields } from './query-config'
 import { StoreCreateWishlistType, StoreCreateWishlist } from './validators'
 
 function getCustomerIdFromRequest(req: AuthenticatedMedusaRequest): string | null {
-  const fromAuth = req.auth_context?.actor_id ?? (req as { auth?: { actor_id?: string } }).auth?.actor_id
-  if (fromAuth) return fromAuth
-
-  const authHeader = req.headers.authorization
-  if (!authHeader?.startsWith('Bearer ')) return null
-
-  const token = authHeader.replace('Bearer ', '')
-  if (!token.startsWith('cust_')) return null
-
-  const withoutPrefix = token.substring(5)
-  const lastUnderscoreIndex = withoutPrefix.lastIndexOf('_')
-  if (lastUnderscoreIndex <= 0) return null
-
-  return withoutPrefix.substring(0, lastUnderscoreIndex)
+  // auth_context is populated by resolveCustomTokenAuth, which verifies the
+  // signed `cust.<payload>.<sig>` bearer token or the session.
+  return req.auth_context?.actor_id ?? (req as { auth?: { actor_id?: string } }).auth?.actor_id ?? null
 }
 
 /**

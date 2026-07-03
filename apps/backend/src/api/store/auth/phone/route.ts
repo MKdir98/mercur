@@ -241,6 +241,11 @@ export async function POST(
         password_hash: passwordHash,
       }
       if (dateOfBirth && dateOfBirth.trim()) {
+        const dobRegex = /^\d{4}-\d{2}-\d{2}$/
+        if (!dobRegex.test(dateOfBirth.trim())) {
+          res.status(400).json({ success: false, message: "فرمت تاریخ تولد باید YYYY-MM-DD باشد" })
+          return
+        }
         metadata.date_of_birth = dateOfBirth.trim()
       }
 

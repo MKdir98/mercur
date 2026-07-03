@@ -232,7 +232,8 @@ export function generateOTP(): string {
  * ساخت instance از SMS service با config از environment
  */
 export function createSmsService(): SmsIrService {
-  const isSandbox = process.env.APP_ENV === 'local' || process.env.APP_ENV === 'demo'
+  // هر محیطی غیر از production در حالت sandbox است (فقط لاگ، بدون ارسال واقعی)
+  const isSandbox = (process.env.APP_ENV || 'production') !== 'production'
 
   const config: SmsIrConfig = {
     // در sandbox mode این مقادیر استفاده نمیشن (چون اصلاً fetch نداریم)
