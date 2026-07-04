@@ -4,9 +4,59 @@ import { createShippingProfilesWorkflow } from '@medusajs/medusa/core-flows'
 
 import { SELLER_MODULE } from '@mercurjs/seller'
 
+import sellerProductLink from '../../../../links/seller-product'
 import sellerShippingOptionLink from '../../../../links/seller-shipping-option'
 import sellerShippingProfileLink from '../../../../links/seller-shipping-profile'
 import sellerStockLocationLink from '../../../../links/seller-stock-location'
+
+// Re-links a seller's products to `shippingProfileId` whenever they're
+// currently pointing at a different (typically orphaned/duplicate) profile.
+// Keeps products in sync with whichever profile is actually active for the
+// seller's postex setup, so a stale link from a past duplicate-profile bug
+// self-heals the next time the seller edits their address.
+async function reassignSellerProductsToShippingProfile(
+  sellerId: string,
+  shippingProfileId: string,
+  scope: MedusaContainer
+): Promise<void> {
+  const query = scope.resolve(ContainerRegistrationKeys.QUERY)
+  const remoteLink = scope.resolve(ContainerRegistrationKeys.REMOTE_LINK)
+
+  const { data: sellerProducts } = await query.graph({
+    entity: sellerProductLink.entryPoint,
+    fields: ['product.id', 'product.shipping_profile.id'],
+    filters: { seller_id: sellerId }
+  })
+
+  const productsToFix = (sellerProducts as any[])
+    .map((sp) => sp.product)
+    .filter(Boolean)
+    .filter((p) => p.shipping_profile?.id !== shippingProfileId)
+
+  if (!productsToFix.length) return
+
+  const staleLinks = productsToFix
+    .filter((p) => p.shipping_profile?.id)
+    .map((p) => ({
+      [Modules.PRODUCT]: { product_id: p.id },
+      [Modules.FULFILLMENT]: { shipping_profile_id: p.shipping_profile.id }
+    }))
+
+  if (staleLinks.length) {
+    await remoteLink.dismiss(staleLinks)
+  }
+
+  await remoteLink.create(
+    productsToFix.map((p) => ({
+      [Modules.PRODUCT]: { product_id: p.id },
+      [Modules.FULFILLMENT]: { shipping_profile_id: shippingProfileId }
+    }))
+  )
+
+  console.log(
+    `🔧 [POSTEX SETUP] reassigned ${productsToFix.length} product(s) for seller ${sellerId} to shipping profile ${shippingProfileId}`
+  )
+}
 
 export async function ensureSellerPostexShipping(
   sellerId: string,
@@ -27,7 +77,8 @@ export async function ensureSellerPostexShipping(
       'stock_location.fulfillment_sets.type',
       'stock_location.fulfillment_sets.service_zones.id',
       'stock_location.fulfillment_sets.service_zones.shipping_options.id',
-      'stock_location.fulfillment_sets.service_zones.shipping_options.provider_id'
+      'stock_location.fulfillment_sets.service_zones.shipping_options.provider_id',
+      'stock_location.fulfillment_sets.service_zones.shipping_options.shipping_profile_id'
     ],
     filters: { seller_id: sellerId }
   })
@@ -70,9 +121,16 @@ export async function ensureSellerPostexShipping(
     `🔧 [POSTEX SETUP] postexShippingOptionsOnLocation=${postexShippingOptionsOnLocation.length} activeLink=${activePostexShippingOptionId ?? 'none'}`
   )
 
-  if (activePostexShippingOptionId) return
+  let shippingProfileId: string | undefined
 
-  if (postexShippingOptionsOnLocation.length) {
+  if (activePostexShippingOptionId) {
+    // Already set up. Still record which profile is "current" so a seller
+    // that already has a working option, but products stuck on an older
+    // orphaned profile from a past duplicate-profile bug, gets repaired below.
+    shippingProfileId = (postexShippingOptionsOnLocation as any[]).find(
+      (so) => so.id === activePostexShippingOptionId
+    )?.shipping_profile_id
+  } else if (postexShippingOptionsOnLocation.length) {
     // The shipping option/service zone/fulfillment set already exist and are
     // fine — only the seller's link to the shipping option is dead. Repair
     // it instead of creating a duplicate shipping option.
@@ -83,8 +141,30 @@ export async function ensureSellerPostexShipping(
       [SELLER_MODULE]: { seller_id: sellerId },
       [Modules.FULFILLMENT]: { shipping_option_id: postexShippingOptionsOnLocation[0].id }
     })
-    return
+    shippingProfileId = postexShippingOptionsOnLocation[0].shipping_profile_id
+  } else {
+    shippingProfileId = await setUpSellerPostexShippingFromScratch(
+      sellerId,
+      stockLocationId,
+      currentLocation,
+      scope
+    )
   }
+
+  if (shippingProfileId) {
+    await reassignSellerProductsToShippingProfile(sellerId, shippingProfileId, scope)
+  }
+}
+
+async function setUpSellerPostexShippingFromScratch(
+  sellerId: string,
+  stockLocationId: string,
+  currentLocation: any,
+  scope: MedusaContainer
+): Promise<string> {
+  const query = scope.resolve(ContainerRegistrationKeys.QUERY)
+  const remoteLink = scope.resolve(ContainerRegistrationKeys.REMOTE_LINK)
+  const fulfillmentModule = scope.resolve(Modules.FULFILLMENT)
 
   // Get or create fulfillment set
   let fulfillmentSetId: string
@@ -138,6 +218,28 @@ export async function ensureSellerPostexShipping(
   let shippingProfileId = (profileLinks[0] as any)?.shipping_profile?.id
 
   if (!shippingProfileId) {
+    // The seller-shipping-profile link can be soft-deleted the same way the
+    // seller-shipping-option link can be (see repair branch above), leaving
+    // the seller's original profile (and any products already linked to it
+    // via product_shipping_profile) orphaned but intact. Look it up by its
+    // deterministic name and repair the link instead of creating a duplicate
+    // profile that existing products won't be linked to.
+    const existingProfiles = await fulfillmentModule.listShippingProfiles({
+      name: `${sellerId}:Default shipping profile`
+    })
+    if (existingProfiles.length) {
+      shippingProfileId = existingProfiles[0].id
+      console.log(
+        `🔧 [POSTEX SETUP] repairing dead seller-shipping-profile link for ${shippingProfileId}`
+      )
+      await remoteLink.create({
+        [SELLER_MODULE]: { seller_id: sellerId },
+        [Modules.FULFILLMENT]: { shipping_profile_id: shippingProfileId }
+      })
+    }
+  }
+
+  if (!shippingProfileId) {
     console.warn(
       `⚠️ Seller ${sellerId} has no shipping profile — creating default`
     )
@@ -182,4 +284,6 @@ export async function ensureSellerPostexShipping(
     [Modules.STOCK_LOCATION]: { stock_location_id: stockLocationId },
     [Modules.FULFILLMENT]: { fulfillment_provider_id: 'postex_postex' }
   })
+
+  return shippingProfileId
 }
