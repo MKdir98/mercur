@@ -3,6 +3,7 @@ import {
   ContainerRegistrationKeys,
   OrderWorkflowEvents
 } from '@medusajs/framework/utils'
+import { logExternalServiceCall } from '@mercurjs/framework'
 
 import { createSmsService } from '../lib/sms/sms-ir.service'
 
@@ -11,7 +12,17 @@ export default async function smsBuyerNewOrderHandler({
   container
 }: SubscriberArgs<{ id: string }>) {
   const templateId = process.env.SMS_IR_ORDER_SUBMIT_BUYER_TEMPLATE_ID
-  if (!templateId) return
+  if (!templateId) {
+    logExternalServiceCall(container, {
+      service_name: 'sms.ir',
+      action: 'sendTemplate',
+      status: 'error',
+      duration_ms: 0,
+      error_message:
+        'SMS_IR_ORDER_SUBMIT_BUYER_TEMPLATE_ID not set — order confirmation SMS skipped'
+    })
+    return
+  }
 
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const {
@@ -33,7 +44,7 @@ export default async function smsBuyerNewOrderHandler({
   const NAME =
     `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim()
 
-  const smsService = createSmsService()
+  const smsService = createSmsService(container)
   const result = await smsService.sendTemplate(phone, templateId, { NAME })
 
   if (!result.success) {

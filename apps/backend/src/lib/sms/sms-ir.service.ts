@@ -4,6 +4,8 @@
  */
 import { randomInt } from "crypto"
 
+import { logExternalServiceCall } from '@mercurjs/framework'
+
 interface SendOTPResponse {
   success: boolean
   messageId?: string
@@ -23,6 +25,15 @@ interface SmsIrConfig {
   templateId: string
   baseUrl: string
   isSandbox: boolean
+  logFn?: (entry: {
+    action: string
+    endpoint: string
+    status: 'success' | 'error'
+    request_data?: Record<string, unknown>
+    response_data?: Record<string, unknown>
+    duration_ms: number
+    error_message?: string
+  }) => void
 }
 
 interface SandboxMessage {
@@ -47,15 +58,19 @@ export class SmsIrService {
    */
   async sendOTP(phone: string, code: string): Promise<SendOTPResponse> {
     const normalizedPhone = phone.replace(/[^0-9+]/g, '')
+    const endpoint = `${this.config.baseUrl}/send/verify`
 
     // اگر در حالت sandbox هستیم
     if (this.config.isSandbox) {
       return this.sendSandboxOTP(normalizedPhone, code)
     }
 
+    const start = Date.now()
+    const requestData = { mobile: normalizedPhone, templateId: this.config.templateId }
+
     try {
       // ارسال واقعی از طریق SMS.ir API
-      const response = await fetch(`${this.config.baseUrl}/send/verify`, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -76,6 +91,14 @@ export class SmsIrService {
       if (!response.ok) {
         const errorText = await response.text()
         console.error('SMS.ir API error:', errorText)
+        this.config.logFn?.({
+          action: 'sendOTP',
+          endpoint,
+          status: 'error',
+          request_data: requestData,
+          duration_ms: Date.now() - start,
+          error_message: errorText,
+        })
         return {
           success: false,
           error: `خطا در ارسال پیامک: ${errorText}`,
@@ -84,15 +107,34 @@ export class SmsIrService {
 
       const data = await response.json()
 
+      this.config.logFn?.({
+        action: 'sendOTP',
+        endpoint,
+        status: 'success',
+        request_data: requestData,
+        response_data: data,
+        duration_ms: Date.now() - start,
+      })
+
       return {
         success: true,
         messageId: data.messageId,
       }
     } catch (error) {
       console.error('SMS send error:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'خطا در ارسال پیامک'
+      this.config.logFn?.({
+        action: 'sendOTP',
+        endpoint,
+        status: 'error',
+        request_data: requestData,
+        duration_ms: Date.now() - start,
+        error_message: errorMessage,
+      })
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'خطا در ارسال پیامک',
+        error: errorMessage,
       }
     }
   }
@@ -146,6 +188,8 @@ export class SmsIrService {
     params: Record<string, string>
   ): Promise<SendSmsResponse> {
     const normalizedPhone = phone.replace(/[^0-9+]/g, '')
+    const endpoint = `${this.config.baseUrl}/send/verify`
+    const requestData = { mobile: normalizedPhone, templateId, params }
 
     if (this.config.isSandbox) {
       console.log('📱 [LOCAL SMS - NO FETCH] Template SMS:', {
@@ -153,8 +197,20 @@ export class SmsIrService {
         templateId,
         params,
       })
+      // Sandbox never hits SMS.ir — logged as 'error' so it's easy to spot
+      // in service_log why a real SMS never actually went out.
+      this.config.logFn?.({
+        action: 'sendTemplate',
+        endpoint,
+        status: 'error',
+        request_data: requestData,
+        duration_ms: 0,
+        error_message: 'sandbox mode — SMS not actually sent',
+      })
       return { success: true, messageId: `local_${Date.now()}` }
     }
+
+    const start = Date.now()
 
     try {
       const parameters = Object.entries(params).map(([name, value]) => ({
@@ -162,7 +218,7 @@ export class SmsIrService {
         value,
       }))
 
-      const response = await fetch(`${this.config.baseUrl}/send/verify`, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -178,16 +234,42 @@ export class SmsIrService {
       if (!response.ok) {
         const errorText = await response.text()
         console.error('SMS.ir API error:', errorText)
+        this.config.logFn?.({
+          action: 'sendTemplate',
+          endpoint,
+          status: 'error',
+          request_data: requestData,
+          duration_ms: Date.now() - start,
+          error_message: errorText,
+        })
         return { success: false, error: `خطا در ارسال پیامک: ${errorText}` }
       }
 
       const data = await response.json()
+      this.config.logFn?.({
+        action: 'sendTemplate',
+        endpoint,
+        status: 'success',
+        request_data: requestData,
+        response_data: data,
+        duration_ms: Date.now() - start,
+      })
       return { success: true, messageId: data.messageId }
     } catch (error) {
       console.error('SMS send error:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'خطا در ارسال پیامک'
+      this.config.logFn?.({
+        action: 'sendTemplate',
+        endpoint,
+        status: 'error',
+        request_data: requestData,
+        duration_ms: Date.now() - start,
+        error_message: errorMessage,
+      })
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'خطا در ارسال پیامک',
+        error: errorMessage,
       }
     }
   }
@@ -230,8 +312,12 @@ export function generateOTP(): string {
 
 /**
  * ساخت instance از SMS service با config از environment
+ *
+ * `container` is optional so existing call sites keep working without changes,
+ * but pass it whenever available — it wires sends up to service_log (table +
+ * Kibana) via logExternalServiceCall so failed/sandboxed sends are visible.
  */
-export function createSmsService(): SmsIrService {
+export function createSmsService(container?: any): SmsIrService {
   // هر محیطی غیر از production در حالت sandbox است (فقط لاگ، بدون ارسال واقعی)
   const isSandbox = (process.env.APP_ENV || 'production') !== 'production'
 
@@ -242,6 +328,13 @@ export function createSmsService(): SmsIrService {
     templateId: isSandbox ? '' : (process.env.SMS_IR_TEMPLATE_ID || ''),
     baseUrl: isSandbox ? '' : 'https://api.sms.ir/v1',
     isSandbox,
+    logFn: container
+      ? (entry) =>
+          logExternalServiceCall(container, {
+            service_name: 'sms.ir',
+            ...entry,
+          })
+      : undefined,
   }
 
   return new SmsIrService(config)

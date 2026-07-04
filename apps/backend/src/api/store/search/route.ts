@@ -32,6 +32,17 @@ const SearchParamsSchema = z.object({
 
 type SearchParamsType = z.infer<typeof SearchParamsSchema>
 
+function isProductOutOfStock(product: any): boolean {
+  const variants = product.variants || []
+  if (variants.length === 0) return false
+  const hasAvailableVariant = variants.some((v: any) => {
+    if (!v.manage_inventory) return true
+    const available = v.inventory_quantity ?? 0
+    return available > 0 || v.allow_backorder
+  })
+  return !hasAvailableVariant
+}
+
 export const GET = async (
   req: MedusaRequest<SearchParamsType>,
   res: MedusaResponse
@@ -112,40 +123,57 @@ export const GET = async (
         'created_at',
         'updated_at',
         'variants.*',
-        'variants.inventory_quantity',
+        'variants.inventory_items.inventory.location_levels.stocked_quantity',
+        'variants.inventory_items.inventory.location_levels.reserved_quantity',
         'variants.prices.*'
       ],
       filters,
+      // Fetch the full matching set so in-stock products can be sorted ahead
+      // of out-of-stock ones across the whole result set, then paginate after.
       pagination: {
-        skip: (searchParams.page - 1) * searchParams.limit,
-        take: searchParams.limit
+        skip: 0,
+        take: 10000
       }
     })
-    
+
     console.log('[Backend Search API] 📥 Query result:', {
       productsCount: products?.length || 0,
       totalCount: metadata?.count || 0
     })
-    
-    const productsWithStockOnly = (products || [])
-      .map((product: any) => {
-        const variants = Array.isArray(product.variants) ? product.variants : []
-        const inStockVariants = variants.filter((variant: any) =>
-          typeof variant.inventory_quantity === 'number' && variant.inventory_quantity > 0
-        )
-        if (inStockVariants.length === 0) return null
-        return { ...product, variants: inStockVariants }
-      })
-      .filter(Boolean)
 
-    console.log('[Backend Search API] 📦 Products with stock:', {
-      before: products?.length || 0,
-      after: productsWithStockOnly.length
+    const productsWithComputedStock = (products || []).map((product: any) => {
+      const variants = Array.isArray(product.variants) ? product.variants : []
+      const variantsWithStock = variants.map((variant: any) => {
+        const inventoryQuantity = (variant.inventory_items || [])
+          .flatMap((item: any) => item.inventory?.location_levels || [])
+          .reduce(
+            (sum: number, level: any) =>
+              sum + Number(level.stocked_quantity) - Number(level.reserved_quantity),
+            0
+          )
+        return { ...variant, inventory_quantity: inventoryQuantity }
+      })
+      return { ...product, variants: variantsWithStock }
+    })
+
+    const inStockProducts = productsWithComputedStock.filter((p: any) => !isProductOutOfStock(p))
+    const outOfStockProducts = productsWithComputedStock.filter((p: any) => isProductOutOfStock(p))
+    const stockSortedProducts = [...inStockProducts, ...outOfStockProducts]
+
+    const pageStart = (searchParams.page - 1) * searchParams.limit
+    const pagedProducts = stockSortedProducts.slice(pageStart, pageStart + searchParams.limit)
+
+    console.log('[Backend Search API] 📦 In-stock-first ordering applied:', {
+      total: stockSortedProducts.length,
+      inStock: inStockProducts.length,
+      outOfStock: outOfStockProducts.length,
+      page: searchParams.page,
+      pageSize: pagedProducts.length
     })
 
     const pricingService = req.scope.resolve(Modules.PRICING)
-    
-    const productsWithCalculatedPrices = await Promise.all((productsWithStockOnly as any[]).map(async (product: any) => {
+
+    const productsWithCalculatedPrices = await Promise.all((pagedProducts as any[]).map(async (product: any) => {
       if (!product.variants?.length) return product
       
       const variantsWithPrices = await Promise.all(

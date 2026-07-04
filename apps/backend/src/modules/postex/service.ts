@@ -25,9 +25,24 @@ function getPostexFlatShippingAmountRial(): number | null {
   return Math.round(n)
 }
 
-async function sendTrackingCodeSms(order: any, trackingCode: string | null) {
+async function sendTrackingCodeSms(
+  order: any,
+  trackingCode: string | null,
+  container: any
+) {
   const templateId = process.env.SMS_IR_DELIVERING_TEMPLATE_ID
-  if (!templateId || !trackingCode) return
+  if (!templateId || !trackingCode) {
+    logExternalServiceCall(container, {
+      service_name: 'sms.ir',
+      action: 'sendTemplate',
+      status: 'error',
+      duration_ms: 0,
+      error_message: !templateId
+        ? 'SMS_IR_DELIVERING_TEMPLATE_ID not set — tracking SMS skipped'
+        : 'missing tracking code — tracking SMS skipped'
+    })
+    return
+  }
 
   const phone = order?.customer?.phone
   if (!phone) return
@@ -35,7 +50,7 @@ async function sendTrackingCodeSms(order: any, trackingCode: string | null) {
   const NAME =
     `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim()
 
-  const smsService = createSmsService()
+  const smsService = createSmsService(container)
   const result = await smsService.sendTemplate(phone, templateId, {
     NAME,
     tracking_code: trackingCode
@@ -727,7 +742,7 @@ class PostexService extends AbstractFulfillmentProviderService {
         parcel_id: result.parcel_id
       })
 
-      await sendTrackingCodeSms(order, result.tracking_code)
+      await sendTrackingCodeSms(order, result.tracking_code, this.getDbContainer())
 
       return {
         tracking_number: result.tracking_code,

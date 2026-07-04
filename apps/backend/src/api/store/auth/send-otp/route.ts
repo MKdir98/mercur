@@ -116,7 +116,7 @@ export async function POST(
   try {
     const code = generateOTP()
 
-    const smsService = createSmsService()
+    const smsService = createSmsService(req.scope)
     const result = await smsService.sendOTP(normalizedPhone, code)
 
     if (!result.success) {

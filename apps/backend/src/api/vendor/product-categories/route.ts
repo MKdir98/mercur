@@ -1,6 +1,16 @@
 import { AuthenticatedMedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 
+import {
+  TRANSLATIONS_MODULE,
+  TranslationsModuleService
+} from '@mercurjs/translations'
+
+import {
+  applyTranslations,
+  shouldTranslate
+} from '../../../shared/utils/apply-translations'
+
 /**
  * @oas [get] /vendor/product-categories
  * operationId: "VendorListProductCategories"
@@ -64,8 +74,19 @@ export const GET = async (
     pagination: req.queryConfig.pagination
   })
 
+  let result = product_categories
+
+  const locale = req.headers['x-locale'] as string | undefined
+  if (locale && shouldTranslate(locale) && result.length > 0) {
+    const translationsService = req.scope.resolve(
+      TRANSLATIONS_MODULE
+    ) as TranslationsModuleService
+    const translationMap = await translationsService.getMapForLocale(locale)
+    result = applyTranslations(result, translationMap, ['name']) as any[]
+  }
+
   res.json({
-    product_categories,
+    product_categories: result,
     count: metadata?.count,
     offset: metadata?.skip,
     limit: metadata?.take

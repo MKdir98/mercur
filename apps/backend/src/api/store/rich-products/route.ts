@@ -37,7 +37,19 @@ const RichProductsQuerySchema = z.object({
   collection_id: z.string().optional(),
   include_facets: z.coerce.boolean().optional().default(false),
   id: z.union([z.string(), z.array(z.string())]).optional(),
+  hide_out_of_stock: z.coerce.boolean().optional().default(false),
 })
+
+function isProductOutOfStock(product: any): boolean {
+  const variants = product.variants || []
+  if (variants.length === 0) return false
+  const hasAvailableVariant = variants.some((v: any) => {
+    if (!v.manage_inventory) return true
+    const available = v.inventory_quantity ?? 0
+    return available > 0 || v.allow_backorder
+  })
+  return !hasAvailableVariant
+}
 
 type RichProductsQueryType = z.infer<typeof RichProductsQuerySchema>
 
@@ -60,6 +72,7 @@ export const GET = async (
       collection_id,
       include_facets,
       id: idParam,
+      hide_out_of_stock: hideOutOfStock,
     } = validatedQuery
 
     // Normalize id param to array
@@ -235,9 +248,11 @@ export const GET = async (
       }
     }
 
-    const isPriceSort = sort_by === 'price_asc' || sort_by === 'price_desc'
-    const fetchLimit = isPriceSort ? 10000 : limit
-    const fetchOffset = isPriceSort ? 0 : offset
+    // Always fetch the full matching set (not just this page) so in-stock
+    // products can be sorted ahead of out-of-stock ones across the entire
+    // result set, not just within whatever page the DB would have returned.
+    const fetchLimit = 10000
+    const fetchOffset = 0
 
     const { data: products, metadata } = await query.graph({
       entity: 'product',
@@ -427,9 +442,19 @@ export const GET = async (
       sortedProducts = [...transformedProducts].sort(() => Math.random() - 0.5)
     }
 
-    if (isPriceSort) {
-      sortedProducts = sortedProducts.slice(offset, offset + limit)
-    }
+    // Partition in-stock products ahead of out-of-stock ones, preserving the
+    // chosen sort order within each group. Pinned (admin-curated) order is
+    // preserved the same way.
+    const inStockProducts = sortedProducts.filter((p) => !isProductOutOfStock(p))
+    const outOfStockProducts = sortedProducts.filter((p) => isProductOutOfStock(p))
+    sortedProducts = hideOutOfStock
+      ? inStockProducts
+      : [...inStockProducts, ...outOfStockProducts]
+
+    // When hiding OOS products, report the post-filter count; otherwise the
+    // total is unchanged since OOS products are reordered, not removed.
+    const resultCount = hideOutOfStock ? sortedProducts.length : (metadata?.count || 0)
+    sortedProducts = sortedProducts.slice(offset, offset + limit)
 
     const locale = req.headers['x-locale'] as string | undefined
     if (locale && shouldTranslate(locale)) {
@@ -465,7 +490,7 @@ export const GET = async (
 
     res.json({
       products: sortedProducts,
-      count: metadata?.count || 0,
+      count: resultCount,
       limit,
       offset,
       sort_by,

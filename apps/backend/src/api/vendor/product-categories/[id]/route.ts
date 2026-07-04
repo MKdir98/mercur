@@ -3,6 +3,16 @@ import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 import { updateProductCategoriesWorkflow } from '@medusajs/medusa/core-flows'
 import { MedusaError } from '@medusajs/framework/utils'
 
+import {
+  TRANSLATIONS_MODULE,
+  TranslationsModuleService
+} from '@mercurjs/translations'
+
+import {
+  applyTranslations,
+  shouldTranslate
+} from '../../../../shared/utils/apply-translations'
+
 /**
  * @oas [get] /vendor/product-categories/{id}
  * operationId: "VendorGetProductCategoryById"
@@ -53,7 +63,18 @@ export const GET = async (
     }
   })
 
-  res.json({ product_category })
+  let result = product_category
+
+  const locale = req.headers['x-locale'] as string | undefined
+  if (locale && shouldTranslate(locale) && result) {
+    const translationsService = req.scope.resolve(
+      TRANSLATIONS_MODULE
+    ) as TranslationsModuleService
+    const translationMap = await translationsService.getMapForLocale(locale)
+    result = applyTranslations(result, translationMap, ['name'])
+  }
+
+  res.json({ product_category: result })
 }
 
 /**
