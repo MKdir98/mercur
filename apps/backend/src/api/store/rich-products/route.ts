@@ -272,7 +272,8 @@ export const GET = async (
         'variants.inventory_items.inventory.location_levels.stocked_quantity',
         'variants.inventory_items.inventory.location_levels.reserved_quantity',
         'variants.prices.*',
-        'categories.*'
+        'categories.*',
+        'categories.parent_category.*'
       ],
       filters,
       pagination: {
