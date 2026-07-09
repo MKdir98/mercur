@@ -273,7 +273,12 @@ export const GET = async (
         'variants.inventory_items.inventory.location_levels.reserved_quantity',
         'variants.prices.*',
         'categories.*',
-        'categories.parent_category.*'
+        'categories.parent_category.*',
+        'attribute_values.id',
+        'attribute_values.attribute_id',
+        'attribute_values.value',
+        'attribute_values.attribute.id',
+        'attribute_values.attribute.name'
       ],
       filters,
       pagination: {
@@ -466,7 +471,8 @@ export const GET = async (
       sortedProducts = applyTranslations(sortedProducts, translationMap, [
         'title',
         'description',
-        'name'
+        'name',
+        'value'
       ]) as typeof sortedProducts
       for (const p of sortedProducts) {
         if (p.categories?.length) {
