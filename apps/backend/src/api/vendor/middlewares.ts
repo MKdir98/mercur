@@ -43,6 +43,7 @@ import { vendorShippingProfilesMiddlewares } from './shipping-profiles/middlewar
 import { vendorStatisticsMiddlewares } from './statistics/middlewares'
 import { vendorStockLocationsMiddlewares } from './stock-locations/middlewares'
 import { vendorStoresMiddlewares } from './stores/middlewares'
+import { vendorSupportTicketsMiddlewares } from './support-tickets/middlewares'
 import { vendorUploadMiddlewares } from './uploads/middlewares'
 import { vendorCitiesMiddlewares } from './cities/middlewares'
 import { vendorStatesMiddlewares } from './states/middlewares'
@@ -135,5 +136,6 @@ export const vendorMiddlewares: MiddlewareRoute[] = [
   ...vendorPricePreferencesRoutesMiddlewares,
   ...vendorCitiesMiddlewares,
   ...vendorStatesMiddlewares,
-  ...vendorProductSizesMiddlewares
+  ...vendorProductSizesMiddlewares,
+  ...vendorSupportTicketsMiddlewares
 ]

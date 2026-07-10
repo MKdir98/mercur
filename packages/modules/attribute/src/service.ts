@@ -11,6 +11,7 @@ import {
 import Attribute from "./models/attribute";
 import AttributePossibleValue from "./models/attribute-possible-value";
 import AttributeValue from "./models/attribute-value";
+import ProductColor from "./models/product-color";
 
 type Attribute = InferTypeOf<typeof Attribute>;
 type AttributePossibleValue = InferTypeOf<typeof AttributePossibleValue>;
@@ -24,6 +25,7 @@ class AttributeModuleService extends MedusaService({
   Attribute,
   AttributeValue,
   AttributePossibleValue,
+  ProductColor,
 }) {
   protected attributeRepository_: DAL.RepositoryService<Attribute>;
   protected attributePossibleValueRepository_: DAL.RepositoryService<AttributePossibleValue>;

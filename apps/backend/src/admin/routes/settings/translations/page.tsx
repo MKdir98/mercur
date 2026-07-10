@@ -13,7 +13,6 @@ import {
   useImportTranslations,
   useGenerateTranslation,
 } from "../../../hooks/api/translations";
-import { useProductCategories } from "../../../hooks/api/product_category";
 import { useState, useRef } from "react";
 import CreateTranslationForm from "./components/create-translation-form";
 import EditTranslationForm from "./components/edit-translation-form";
@@ -57,7 +56,6 @@ const TranslationsPage = () => {
   const { mutateAsync: importTranslations, isPending: isImporting } =
     useImportTranslations({});
   const { mutateAsync: generate } = useGenerateTranslation()
-  const { product_categories } = useProductCategories()
 
   const handleEdit = (t: { id: string; source_text: string; translated_text: string }) => {
     setEditingTranslation(t);
@@ -108,7 +106,25 @@ const TranslationsPage = () => {
   };
 
   const backfillCategories = async () => {
-    const cats = (product_categories ?? []) as { id: string; name: string }[]
+    let offset = 0
+    const limit = 100
+    let total = 0
+    let cats: { id: string; name: string }[] = []
+
+    try {
+      const first: any = await mercurQuery('/admin/product-categories', { method: 'GET', query: { limit, offset, fields: 'id,name' } })
+      total = first.count ?? 0
+      cats = first.product_categories ?? []
+      while (cats.length < total) {
+        offset += limit
+        const page: any = await mercurQuery('/admin/product-categories', { method: 'GET', query: { limit, offset, fields: 'id,name' } })
+        cats = [...cats, ...(page.product_categories ?? [])]
+      }
+    } catch {
+      toast.error("Failed to fetch categories")
+      return
+    }
+
     if (!cats.length) { toast.warning("No categories found"); return }
     if (!confirm(`Generate translations for ${cats.length} categories?`)) return
 

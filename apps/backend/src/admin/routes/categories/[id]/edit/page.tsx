@@ -20,8 +20,14 @@ import { useQueryClient } from "@tanstack/react-query"
 import { mercurQuery } from "../../../../lib/client"
 import { resolveImageUrl } from "../../../../utils"
 import { useState, useMemo, useRef, useEffect, useCallback } from "react"
+import {
+  EntityTranslationsSection,
+  TranslationField,
+} from "../../../../components/entity-translations/EntityTranslationsSection"
 
 const ACCEPT_IMAGE = "image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+
+const TRANSLATION_FIELDS: TranslationField[] = [{ field_name: "name", label: "Name" }]
 
 const EditCategoryPage = () => {
   const navigate = useNavigate()
@@ -198,8 +204,12 @@ const EditCategoryPage = () => {
         <FocusModal.Header>
           <Heading>Edit category</Heading>
         </FocusModal.Header>
-        <form id="edit-category-form" onSubmit={handleSubmit}>
-          <FocusModal.Body className="flex flex-col gap-4 py-6">
+        <FocusModal.Body className="flex flex-col gap-4 overflow-y-auto py-6">
+          <form
+            id="edit-category-form"
+            onSubmit={handleSubmit}
+            className="flex flex-col gap-4"
+          >
             <div className="flex flex-col gap-2">
               <Label htmlFor="name">Name</Label>
               <Input
@@ -319,8 +329,16 @@ const EditCategoryPage = () => {
                 </button>
               )}
             </div>
-          </FocusModal.Body>
-        </form>
+          </form>
+          <div className="border-t border-ui-border-base pt-4">
+            <EntityTranslationsSection
+              entityType="category"
+              entityId={id ?? ""}
+              fields={TRANSLATION_FIELDS}
+              className="border-none p-0"
+            />
+          </div>
+        </FocusModal.Body>
         <FocusModal.Footer>
           <Button variant="secondary" onClick={handleClose}>
             Cancel
