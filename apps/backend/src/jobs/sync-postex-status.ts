@@ -2,7 +2,7 @@ import { MedusaContainer } from '@medusajs/framework/types'
 import { ContainerRegistrationKeys, Modules } from '@medusajs/framework/utils'
 import { completeOrderWorkflow } from '@medusajs/medusa/core-flows'
 
-import PostexService from '../modules/postex/service'
+import PostexService, { sendTrackingCodeSms } from '../modules/postex/service'
 
 export default async function syncPostexStatusJob(container: MedusaContainer) {
   console.log('🔹 [POSTEX SYNC] Starting status sync job')
@@ -15,6 +15,7 @@ export default async function syncPostexStatusJob(container: MedusaContainer) {
   const postexService = new PostexService(container, postexConfig)
   const fulfillmentModule = container.resolve(Modules.FULFILLMENT)
   const knex = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+  const query = container.resolve(ContainerRegistrationKeys.QUERY)
 
   if (!knex) {
     console.error('❌ [POSTEX SYNC] Knex connection not available')
@@ -67,18 +68,45 @@ export default async function syncPostexStatusJob(container: MedusaContainer) {
           break
         case 3:
           newStatus = 'picked_up'
-          try {
-            await fulfillmentModule.updateFulfillment(shipment.fulfillment_id, {
-              shipped_at: new Date()
-            })
-            console.log(
-              `✅ [POSTEX SYNC] Updated fulfillment ${shipment.fulfillment_id} to shipped`
-            )
-          } catch (error) {
-            console.error(
-              `❌ [POSTEX SYNC] Error updating fulfillment to shipped:`,
-              error
-            )
+          if (shipment.status !== 'picked_up') {
+            try {
+              await fulfillmentModule.updateFulfillment(shipment.fulfillment_id, {
+                shipped_at: new Date()
+              })
+              console.log(
+                `✅ [POSTEX SYNC] Updated fulfillment ${shipment.fulfillment_id} to shipped`
+              )
+            } catch (error) {
+              console.error(
+                `❌ [POSTEX SYNC] Error updating fulfillment to shipped:`,
+                error
+              )
+            }
+
+            try {
+              const {
+                data: [order]
+              } = await query.graph({
+                entity: 'order',
+                fields: [
+                  'id',
+                  'customer.phone',
+                  'customer.first_name',
+                  'customer.last_name'
+                ],
+                filters: { id: shipment.order_id }
+              })
+              await sendTrackingCodeSms(
+                order,
+                shipment.postex_tracking_code,
+                container
+              )
+            } catch (error) {
+              console.error(
+                `❌ [POSTEX SYNC] Error sending tracking code SMS:`,
+                error
+              )
+            }
           }
           break
         case 7:

@@ -25,7 +25,7 @@ function getPostexFlatShippingAmountRial(): number | null {
   return Math.round(n)
 }
 
-async function sendTrackingCodeSms(
+export async function sendTrackingCodeSms(
   order: any,
   trackingCode: string | null,
   container: any
@@ -741,8 +741,6 @@ class PostexService extends AbstractFulfillmentProviderService {
         tracking_code: result.tracking_code,
         parcel_id: result.parcel_id
       })
-
-      await sendTrackingCodeSms(order, result.tracking_code, this.getDbContainer())
 
       return {
         tracking_number: result.tracking_code,
