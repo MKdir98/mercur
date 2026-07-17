@@ -33,27 +33,27 @@ export function buildDomesticIranPaymentProviders(): ProviderEntry[] {
         sandbox: effectiveZarinpalSandbox(),
       },
     },
-    {
-      resolve: '@mercurjs/payment-sep',
-      id: 'sep',
-      options: {
-        terminalId:
-          process.env.SEP_TERMINAL_ID ||
-          (effectiveSepSandbox() ? IRAN_BANKTEST_SEP_CREDENTIALS.terminalId : ''),
-        sandbox: effectiveSepSandbox(),
-      },
-    },
-    {
-      resolve: '@mercurjs/payment-parsian',
-      id: 'parsian',
-      options: {
-        loginAccount:
-          process.env.PARSIAN_PIN ||
-          (effectiveParsianSandbox()
-            ? IRAN_BANKTEST_PARSIAN_DEFAULT_SOAP_LOGIN_ACCOUNT
-            : ''),
-        sandbox: effectiveParsianSandbox(),
-      },
-    },
+    // {
+    //   resolve: '@mercurjs/payment-sep',
+    //   id: 'sep',
+    //   options: {
+    //     terminalId:
+    //       process.env.SEP_TERMINAL_ID ||
+    //       (effectiveSepSandbox() ? IRAN_BANKTEST_SEP_CREDENTIALS.terminalId : ''),
+    //     sandbox: effectiveSepSandbox(),
+    //   },
+    // },
+    // {
+    //   resolve: '@mercurjs/payment-parsian',
+    //   id: 'parsian',
+    //   options: {
+    //     loginAccount:
+    //       process.env.PARSIAN_PIN ||
+    //       (effectiveParsianSandbox()
+    //         ? IRAN_BANKTEST_PARSIAN_DEFAULT_SOAP_LOGIN_ACCOUNT
+    //         : ''),
+    //     sandbox: effectiveParsianSandbox(),
+    //   },
+    // },
   ]
 }

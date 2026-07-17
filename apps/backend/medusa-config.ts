@@ -2,42 +2,12 @@ import { defineConfig, loadEnv } from '@medusajs/framework/utils'
 
 import { IRAN_BANKTEST_SEP_CREDENTIALS } from '@mercurjs/framework'
 
-import { buildDomesticIranPaymentProviders } from './src/lib/build-domestic-iran-payment-providers'
 import {
-  effectiveRemitationSandbox,
   effectiveSepSandbox,
   effectiveZarinpalSandbox
 } from './src/lib/iran-payment-sandbox'
 
 loadEnv(process.env.NODE_ENV || 'development', process.cwd())
-
-const useRemitationPaymentGateway =
-  process.env.USE_REMITATION_PAYMENT_GATEWAY === 'true'
-
-const domesticPaymentProviders = useRemitationPaymentGateway
-  ? [
-      {
-        resolve: '@mercurjs/payment-remitation',
-        id: 'remitation',
-        options: {
-          accessKey: process.env.REMITATION_ACCESS_KEY || '',
-          secretKey: process.env.REMITATION_SECRET_KEY || '',
-          baseUrl:
-            process.env.REMITATION_API_BASE_URL ||
-            'https://api.merchant.remitation.com/api',
-          provider:
-            process.env.REMITATION_PAYMENT_PROVIDER === 'mollie'
-              ? 'mollie'
-              : 'stripe',
-          currency: process.env.REMITATION_PAYMENT_CURRENCY || 'USD',
-          rialPerUsd: process.env.REMITATION_RIAL_PER_USD
-            ? parseFloat(process.env.REMITATION_RIAL_PER_USD)
-            : undefined,
-          sandbox: effectiveRemitationSandbox()
-        }
-      }
-    ]
-  : buildDomesticIranPaymentProviders()
 
 module.exports = defineConfig({
   projectConfig: {
@@ -168,13 +138,13 @@ module.exports = defineConfig({
       options: {
         providers: [
           {
-            resolve: '@mercurjs/payment-stripe-connect',
-            id: 'stripe-connect',
+            resolve: '@mercurjs/payment-zarinpal',
+            id: 'zarinpal',
             options: {
-              apiKey: process.env.STRIPE_SECRET_API_KEY
+              merchantId: process.env.ZARINPAL_MERCHANT_ID,
+              sandbox: effectiveZarinpalSandbox()
             }
-          },
-          ...domesticPaymentProviders
+          }
         ]
       }
     },
