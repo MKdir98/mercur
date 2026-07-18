@@ -93,7 +93,13 @@ export async function GET(
 
   const { rows: paymentProviders, metadata } = await remoteQuery(queryObject)
 
-  const filtered = applyGatewayEnvFilter(paymentProviders, {
+  // Manual/system payment is a Medusa core fallback, not a real checkout
+  // option for customers — never surface it in the storefront.
+  const withoutManual = paymentProviders.filter(
+    (p) => p.id !== "pp_system_default"
+  )
+
+  const filtered = applyGatewayEnvFilter(withoutManual, {
     requestQueryRegionId: regionId,
     storeLockedRegionIdFromEnv:
       process.env.STORE_LOCKED_REGION_ID?.trim() ?? null,
