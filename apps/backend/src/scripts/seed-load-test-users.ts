@@ -8,6 +8,11 @@
  *   phone: +989000000001 ... +989000000050
  *
  * Outputs /tmp/load-test-users.json for k6 scripts to consume.
+ *
+ * Re-running this script never creates duplicate customers: existing
+ * loadtest_* customers are reused and have their password re-enabled
+ * (undoing disable-load-test-users.ts), instead of being recreated.
+ * Run disable-load-test-users.ts after a load test to block their login.
  */
 import bcrypt from 'bcrypt'
 import * as fs from 'fs'
@@ -39,12 +44,16 @@ export default async function seedLoadTestUsers({ container }: ExecArgs) {
     try {
       const existing = await customerModule.listCustomers({ email })
       if (existing.length > 0) {
-        console.log(`[skip] ${email} already exists (id: ${existing[0].id})`)
+        const customer = existing[0]
+        await customerModule.updateCustomers(customer.id, {
+          metadata: { ...customer.metadata, password_hash: passwordHash }
+        })
+        console.log(`[reuse] ${email} already exists (id: ${customer.id}), password re-enabled`)
         users.push({
           email,
           phone,
           password: PASSWORD,
-          customerId: existing[0].id
+          customerId: customer.id
         })
         continue
       }
