@@ -65,6 +65,7 @@ export function apiRequestLogger(
     kibanaLogger.apiRequest({
       method: req.method,
       path,
+      host: req.headers.host,
       api_type: resolveApiType(path),
       http_status_code: res.statusCode,
       duration_ms: duration,

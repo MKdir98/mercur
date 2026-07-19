@@ -45,6 +45,7 @@ export interface ExternalCallEntry {
 export interface ApiRequestEntry {
   method: string
   path: string
+  host?: string
   api_type: 'store' | 'admin' | 'vendor' | 'hooks' | 'other'
   http_status_code: number
   duration_ms: number
@@ -253,6 +254,7 @@ export async function ensureKibanaIndexTemplates(): Promise<void> {
           environment: { type: 'keyword' },
           method: { type: 'keyword' },
           path: { type: 'keyword' },
+          host: { type: 'keyword' },
           api_type: { type: 'keyword' },
           http_status_code: { type: 'short' },
           duration_ms: { type: 'integer' },
