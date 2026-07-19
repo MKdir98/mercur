@@ -35,6 +35,7 @@ export const POST = async (
     manually_edited: true
   })
   const translation = Array.isArray(result) ? result[0] : result
+  translationsService.invalidateCache()
 
   res.json({ translation })
 }
@@ -43,6 +44,7 @@ export const DELETE = async (req: MedusaRequest, res: MedusaResponse) => {
   const translationsService = req.scope.resolve(TRANSLATIONS_MODULE) as TranslationsModuleService
 
   await translationsService.deleteTranslations([req.params.id])
+  translationsService.invalidateCache()
 
   res.status(200).json({
     id: req.params.id,

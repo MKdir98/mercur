@@ -71,6 +71,10 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     }
   }
 
+  if (created.length > 0 || updated.length > 0) {
+    translationsService.invalidateCache()
+  }
+
   res.status(201).json({
     created: created.length,
     updated: updated.length,

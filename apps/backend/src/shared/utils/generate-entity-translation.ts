@@ -88,6 +88,7 @@ export async function generateEntityTranslation(
       translated_text,
       manually_edited: false,
     })
+    translationsService.invalidateCache()
     return 'updated'
   }
 
@@ -98,5 +99,6 @@ export async function generateEntityTranslation(
     entity_id,
     field_name,
   })
+  translationsService.invalidateCache()
   return 'created'
 }

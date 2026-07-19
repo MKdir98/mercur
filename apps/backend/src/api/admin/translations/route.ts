@@ -34,6 +34,7 @@ export const POST = async (
 
   const result = await translationsService.createTranslations(req.validatedBody)
   const translation = Array.isArray(result) ? result[0] : result
+  translationsService.invalidateCache()
 
   res.status(201).json({ translation })
 }
