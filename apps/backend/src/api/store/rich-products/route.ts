@@ -326,90 +326,112 @@ export const GET = async (
       )
     }
 
-    const transformedProducts = await Promise.all(
-      (products as any[]).map(async (product: any) => {
-        if (!product.variants?.length) return product
+    // Precompute per-variant stock, and group price sets by currency so pricing
+    // can be calculated with one batched call per currency instead of one call
+    // per variant (that N+1 pattern dominated this endpoint's latency).
+    const inventoryByVariantId = new Map<string, number>()
+    const priceSetIdsByCurrency = new Map<string, Set<string>>()
 
-        const variantsWithPrices = await Promise.all(
-          product.variants.map(async (variant: any) => {
-            const inventoryQuantity = variant.inventory_items
-              .flatMap((item: any) => item.inventory.location_levels)
-              .reduce(
-                (sum: number, level: any) =>
-                  sum +
-                  Number(level.stocked_quantity) -
-                  Number(level.reserved_quantity),
-                0
+    for (const product of products as any[]) {
+      for (const variant of product.variants || []) {
+        const inventoryQuantity = variant.inventory_items
+          .flatMap((item: any) => item.inventory.location_levels)
+          .reduce(
+            (sum: number, level: any) =>
+              sum +
+              Number(level.stocked_quantity) -
+              Number(level.reserved_quantity),
+            0
+          )
+        inventoryByVariantId.set(variant.id, inventoryQuantity)
+
+        const basePrice = variant.prices?.[0]
+        if (basePrice) {
+          const currencyCode = basePrice.currency_code || 'IRR'
+          const priceSetIds =
+            priceSetIdsByCurrency.get(currencyCode) || new Set<string>()
+          priceSetIds.add(basePrice.price_set_id)
+          priceSetIdsByCurrency.set(currencyCode, priceSetIds)
+        }
+      }
+    }
+
+    const calculatedPriceByPriceSetId = new Map<string, any>()
+    await Promise.all(
+      Array.from(priceSetIdsByCurrency.entries()).map(
+        async ([currencyCode, priceSetIds]) => {
+          try {
+            const calculatedPrices = await pricingService.calculatePrices(
+              { id: Array.from(priceSetIds) },
+              { context: { currency_code: currencyCode } }
+            )
+            for (const calculatedPrice of calculatedPrices || []) {
+              calculatedPriceByPriceSetId.set(
+                (calculatedPrice as any).id,
+                calculatedPrice
               )
-
-            const basePrice = variant.prices?.[0]
-            if (!basePrice) {
-              return {
-                ...variant,
-                inventory_quantity: inventoryQuantity,
-                calculated_price: null
-              }
             }
+          } catch (error) {
+            console.error(
+              'Error calculating prices for currency:',
+              currencyCode,
+              error
+            )
+          }
+        }
+      )
+    )
 
-            try {
-              const calculatedPrices = await pricingService.calculatePrices(
-                { id: [basePrice.price_set_id] },
-                { context: { currency_code: basePrice.currency_code || 'IRR' } }
-              )
+    const transformedProducts = (products as any[]).map((product: any) => {
+      if (!product.variants?.length) return product
 
-              const calculatedPrice = calculatedPrices?.[0]
+      const variantsWithPrices = product.variants.map((variant: any) => {
+        const inventoryQuantity = inventoryByVariantId.get(variant.id) ?? 0
 
-              return {
-                ...variant,
-                inventory_quantity: inventoryQuantity,
-                calculated_price: calculatedPrice
-                  ? {
-                      calculated_amount: calculatedPrice.calculated_amount,
-                      calculated_amount_with_tax:
-                        calculatedPrice.calculated_amount,
-                      original_amount:
-                        (calculatedPrice as any).original_amount ||
-                        basePrice.amount,
-                      original_amount_with_tax:
-                        (calculatedPrice as any).original_amount ||
-                        basePrice.amount,
-                      currency_code: basePrice.currency_code || 'IRR',
-                      price_list_type:
-                        (calculatedPrice as any).price_list_type || null
-                    }
-                  : {
-                      calculated_amount: basePrice.amount,
-                      calculated_amount_with_tax: basePrice.amount,
-                      original_amount: basePrice.amount,
-                      original_amount_with_tax: basePrice.amount,
-                      currency_code: basePrice.currency_code || 'IRR'
-                    }
-              }
-            } catch (error) {
-              console.error(
-                'Error calculating price for variant:',
-                variant.id,
-                error
-              )
-              return {
-                ...variant,
-                inventory_quantity: inventoryQuantity,
-                calculated_price: {
-                  calculated_amount: basePrice.amount,
-                  calculated_amount_with_tax: basePrice.amount,
-                  original_amount: basePrice.amount,
-                  original_amount_with_tax: basePrice.amount,
-                  currency_code: basePrice.currency_code || 'IRR'
-                }
-              }
-            }
-          })
+        const basePrice = variant.prices?.[0]
+        if (!basePrice) {
+          return {
+            ...variant,
+            inventory_quantity: inventoryQuantity,
+            calculated_price: null
+          }
+        }
+
+        const calculatedPrice = calculatedPriceByPriceSetId.get(
+          basePrice.price_set_id
         )
 
-        const seller = productIdToSeller[product.id] || null
-        return { ...product, seller, variants: variantsWithPrices }
+        return {
+          ...variant,
+          inventory_quantity: inventoryQuantity,
+          calculated_price: calculatedPrice
+            ? {
+                calculated_amount: calculatedPrice.calculated_amount,
+                calculated_amount_with_tax:
+                  calculatedPrice.calculated_amount,
+                original_amount:
+                  (calculatedPrice as any).original_amount ||
+                  basePrice.amount,
+                original_amount_with_tax:
+                  (calculatedPrice as any).original_amount ||
+                  basePrice.amount,
+                currency_code: basePrice.currency_code || 'IRR',
+                price_list_type:
+                  (calculatedPrice as any).price_list_type || null
+              }
+            : {
+                calculated_amount: basePrice.amount,
+                calculated_amount_with_tax: basePrice.amount,
+                original_amount: basePrice.amount,
+                original_amount_with_tax: basePrice.amount,
+                currency_code: basePrice.currency_code || 'IRR'
+              }
+        }
       })
-    )
+
+      const seller = productIdToSeller[product.id] || null
+      return { ...product, seller, variants: variantsWithPrices }
+    })
 
     const getMinPrice = (p: any) => {
       if (!p.variants?.length) return Infinity
