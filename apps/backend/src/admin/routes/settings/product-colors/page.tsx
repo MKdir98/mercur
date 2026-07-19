@@ -1,5 +1,4 @@
 import { defineRouteConfig } from '@medusajs/admin-sdk'
-import { Swatch } from '@medusajs/icons'
 import { Button, Container, Heading, Input, Table, Text, toast } from '@medusajs/ui'
 import { useEffect, useState } from 'react'
 
@@ -7,8 +6,8 @@ import {
   ProductColorDTO,
   useProductColors,
   useUpsertProductColor
-} from '../../hooks/api/product-colors'
-import { SingleColumnLayout } from '../../layouts/single-column'
+} from '../../../hooks/api/product-colors'
+import { SingleColumnLayout } from '../../../layouts/single-column'
 
 const HEX_CODE_REGEX = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/
 
@@ -125,8 +124,7 @@ const ProductColorsPage = () => {
 }
 
 export const config = defineRouteConfig({
-  label: 'Product Colors',
-  icon: Swatch
+  label: 'Product Colors'
 })
 
 export default ProductColorsPage
