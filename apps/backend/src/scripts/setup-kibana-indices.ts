@@ -4,7 +4,11 @@
  *
  * Usage:
  *   cd apps/backend
- *   ELASTICSEARCH_NODE=http://your-es-server:9200 npx ts-node src/scripts/setup-kibana-indices.ts
+ *   KIBANA_ES_NODE=http://your-es-server:9200 \
+ *   KIBANA_ES_PASSWORD=your_elastic_password \
+ *   npx ts-node src/scripts/setup-kibana-indices.ts
+ *
+ * (NOT ELASTICSEARCH_NODE — that's the separate product-search client.)
  */
 import { loadEnv } from '@medusajs/framework/utils'
 
@@ -14,10 +18,7 @@ loadEnv(process.env.NODE_ENV || 'development', process.cwd())
 
 async function main() {
   console.log('Creating Kibana index templates...')
-  console.log(
-    'ES node:',
-    process.env.ELASTICSEARCH_NODE || 'http://localhost:9200'
-  )
+  console.log('ES node:', process.env.KIBANA_ES_NODE || 'http://localhost:9200')
 
   await ensureKibanaIndexTemplates()
 

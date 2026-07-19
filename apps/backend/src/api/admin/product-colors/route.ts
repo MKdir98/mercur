@@ -4,7 +4,7 @@ import { ContainerRegistrationKeys, MedusaError, MedusaErrorTypes } from '@medus
 import { ATTRIBUTE_MODULE, AttributeModuleService } from '@mercurjs/attribute'
 
 const HEX_CODE_REGEX = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/
-const COLOR_OPTION_TITLES = ['Color', 'color', 'COLOR', 'Colour', 'colour']
+const COLOR_OPTION_TITLES = ['Color', 'color', 'COLOR', 'Colour', 'colour', 'رنگ']
 
 /**
  * @oas [get] /admin/product-colors

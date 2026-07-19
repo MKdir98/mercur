@@ -77,38 +77,14 @@ services:
       - cluster.name=mercur-auction-logs
       - node.name=mercur-es-node-1
     ports:
-      # Loopback-only: never expose ES itself to the internet. The backend
-      # (running on the same host) reaches it via localhost; kibana reaches
-      # it via the internal docker network (elasticsearch:9200), unaffected
-      # by this binding.
-      - "127.0.0.1:9200:9200"
+      - "9200:9200"
+      - "9300:9300"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     networks:
       - mercur-auction
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.11.0
-    container_name: mercur-kibana
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - SERVER_NAME=mercur-kibana
-    ports:
-      # Loopback-only: nginx on the host terminates TLS + basic auth and
-      # proxies to this port. Never publish 5601 directly to 0.0.0.0.
-      - "127.0.0.1:5601:5601"
-    networks:
-      - mercur-auction
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5

@@ -111,8 +111,14 @@ let kibanaClient: Client | null = null
 
 function getKibanaClient(): Client {
   if (!kibanaClient) {
+    // The logging ES runs with xpack.security enabled (it holds request/log
+    // data), unlike the product-search ES — so it needs credentials.
+    const password = process.env.KIBANA_ES_PASSWORD || process.env.ELASTIC_PASSWORD
     kibanaClient = new Client({
       node: process.env.KIBANA_ES_NODE || 'http://localhost:9200',
+      auth: password
+        ? { username: process.env.KIBANA_ES_USERNAME || 'elastic', password }
+        : undefined,
       maxRetries: 3,
       requestTimeout: 5000
     })
@@ -271,6 +277,41 @@ export async function ensureKibanaIndexTemplates(): Promise<void> {
       } as any)
     } catch (err) {
       console.error(`[kibana] Failed to create template ${tpl.name}:`, err)
+    }
+  }
+}
+
+// ── Retention ────────────────────────────────────────────────────────────────
+
+// These indices are static (one ever-growing index per log type, not rotated
+// daily), so classic ILM delete-phase policies don't apply cleanly — ILM
+// deletes whole indices, and there's only one, so it would eventually delete
+// everything at once rather than just the old documents. Deleting old
+// documents by query is the safe equivalent for a single growing index.
+export async function pruneOldLogs(retentionDays = 4): Promise<void> {
+  const client = getKibanaClient()
+  const cutoff = `now-${retentionDays}d/d`
+
+  for (const index of [
+    APP_LOGS_INDEX,
+    EXTERNAL_CALLS_INDEX,
+    API_REQUESTS_INDEX
+  ]) {
+    try {
+      const result = await client.deleteByQuery({
+        index,
+        query: { range: { '@timestamp': { lt: cutoff } } },
+        conflicts: 'proceed',
+        wait_for_completion: true
+      } as any)
+      console.log(
+        `[kibana] Pruned ${(result as any).deleted ?? 0} docs older than ${retentionDays}d from ${index}`
+      )
+    } catch (err: any) {
+      // index_not_found is expected before the first log ever ships
+      if (err?.meta?.statusCode !== 404) {
+        console.error(`[kibana] Failed to prune ${index}:`, err)
+      }
     }
   }
 }

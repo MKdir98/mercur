@@ -34,7 +34,12 @@ export function apiRequestLogger(
   res: MedusaResponse,
   next: MedusaNextFunction
 ) {
-  const path = req.path || req.url || ''
+  // NOT req.path/req.url: Express's app.use('/*', ...) mounts this as a
+  // prefix-stripping router, and '/*' greedily matches (and strips) the
+  // ENTIRE path before this middleware runs — req.path/req.url read as '/'
+  // for every request until Express restores them after next(). originalUrl
+  // is set once per request and never mutated by mount-prefix stripping.
+  const path = (req.originalUrl || req.url || req.path || '').split('?')[0]
 
   if (SKIP_LOGGING_PATHS.some((p) => path.startsWith(p))) {
     return next()
