@@ -2,6 +2,7 @@ import { AuthenticatedMedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 
 import sellerPriceList from '../../../links/seller-price-list'
+import { invalidateListingCache } from '../../../infrastructure/redis'
 import { fetchSellerByAuthActorId } from '../../../shared/infra/http/utils'
 import { createVendorPriceListWorkflow } from '../../../workflows/price-list/workflows'
 import { VendorCreatePriceListType } from './validators'
@@ -130,6 +131,7 @@ export const POST = async (
     container: req.scope,
     input: { price_lists_data: req.validatedBody, seller_id: seller.id }
   })
+  await invalidateListingCache()
 
   res.status(201).json({ price_list })
 }

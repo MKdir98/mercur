@@ -1,6 +1,7 @@
 import { AuthenticatedMedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 
+import { invalidateListingCache } from '../../../../../infrastructure/redis'
 import { fetchSellerByAuthActorId } from '../../../../../shared/infra/http/utils'
 import { createVendorPriceListPricesWorkflow } from '../../../../../workflows/price-list/workflows'
 import { VendorCreatePriceListPriceType } from '../../validators'
@@ -65,6 +66,7 @@ export const POST = async (
       seller_id: seller.id
     }
   })
+  await invalidateListingCache()
 
   const { data: price_list } = await query.graph({
     entity: 'price_list',

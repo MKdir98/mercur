@@ -183,6 +183,23 @@ export function createRedisCache(prefix: string): Promise<RedisCache> {
   return getRedisClient().then((client) => new RedisCache(client, prefix))
 }
 
+// Flushes every cached store-listing response (rich-products, brands,
+// popular-products, product-categories — see createListingCacheMiddleware).
+// Call this from anywhere product/category/price data changes.
+export async function invalidateListingCache(): Promise<void> {
+  if (process.env.ENABLE_REDIS_CACHE !== 'true') return
+
+  try {
+    const cache = await createRedisCache('listing:')
+    const keys = await cache.keys('*')
+    if (keys.length) {
+      await Promise.all(keys.map((k) => cache.del(k)))
+    }
+  } catch (err) {
+    console.error('Listing cache invalidation error:', err)
+  }
+}
+
 
 
 

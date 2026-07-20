@@ -5,6 +5,7 @@ import {
   updatePriceListsWorkflow
 } from '@medusajs/medusa/core-flows'
 
+import { invalidateListingCache } from '../../../../infrastructure/redis'
 import { VendorUpdatePriceListType } from '../validators'
 
 /**
@@ -105,6 +106,7 @@ export const POST = async (
   await updatePriceListsWorkflow.run({
     input: { price_lists_data: [{ ...req.validatedBody, id }] }
   })
+  await invalidateListingCache()
 
   const {
     data: [price_list]
@@ -166,6 +168,7 @@ export const DELETE = async (
       ids: [req.params.id]
     }
   })
+  await invalidateListingCache()
 
   res.status(200).json({
     id: req.params.id,

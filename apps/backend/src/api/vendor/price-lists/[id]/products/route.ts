@@ -2,6 +2,7 @@ import { AuthenticatedMedusaRequest, MedusaResponse } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 import { fetchPriceListPriceIdsForProduct } from '@medusajs/medusa/api/admin/price-lists/helpers'
 
+import { invalidateListingCache } from '../../../../../infrastructure/redis'
 import { batchVendorPriceListPricesWorkflow } from '../../../../../workflows/price-list/workflows'
 import { VendorUpdateProductsOnPriceListType } from '../../validators'
 
@@ -172,6 +173,7 @@ export const POST = async (
       delete: productPriceIds
     }
   })
+  await invalidateListingCache()
 
   const {
     data: [price_list]

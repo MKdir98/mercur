@@ -5,6 +5,8 @@ import {
 } from '@medusajs/framework/utils'
 import { batchPriceListPricesWorkflow } from '@medusajs/medusa/core-flows'
 
+import { invalidateListingCache } from '../../../../../../infrastructure/redis'
+
 /**
  * @oas [delete] /vendor/price-lists/{id}/prices/{price_id}
  * operationId: "VendorDeletePriceListPriceById"
@@ -75,6 +77,7 @@ export const DELETE = async (
       }
     }
   })
+  await invalidateListingCache()
 
   res.status(200).json({
     id: req.params.price_id,
