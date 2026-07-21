@@ -6,6 +6,7 @@ import {
 import { logExternalServiceCall } from '@mercurjs/framework'
 
 import { createSmsService } from '../lib/sms/sms-ir.service'
+import { orderCode } from '../shared/utils'
 
 export default async function smsSellerNewOrderHandler({
   event,
@@ -29,7 +30,13 @@ export default async function smsSellerNewOrderHandler({
     data: [order]
   } = await query.graph({
     entity: 'order',
-    fields: ['id', 'seller.phone', 'customer.first_name', 'customer.last_name'],
+    fields: [
+      'id',
+      'display_id',
+      'seller.phone',
+      'customer.first_name',
+      'customer.last_name'
+    ],
     filters: { id: event.data.id }
   })
 
@@ -38,9 +45,16 @@ export default async function smsSellerNewOrderHandler({
 
   const NAME =
     `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim()
+  const order_code = (() => {
+    const displayId = (order as { display_id?: number }).display_id
+    return displayId ? orderCode(displayId) : order.id
+  })()
 
   const smsService = createSmsService(container)
-  const result = await smsService.sendTemplate(phone, templateId, { NAME })
+  const result = await smsService.sendTemplate(phone, templateId, {
+    NAME,
+    order_code
+  })
 
   if (!result.success) {
     console.error(

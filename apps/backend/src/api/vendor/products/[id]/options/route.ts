@@ -1,11 +1,16 @@
 import { AuthenticatedMedusaRequest, MedusaResponse } from '@medusajs/framework'
-import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
+import {
+  ContainerRegistrationKeys,
+  MedusaError
+} from '@medusajs/framework/utils'
 import { createProductOptionsWorkflow } from '@medusajs/medusa/core-flows'
 
 import { fetchSellerByAuthActorId } from '../../../../../shared/infra/http/utils'
 import { fetchProductDetails } from '../../../../../shared/infra/http/utils/products'
 import { createProductUpdateRequestWorkflow } from '../../../../../workflows/requests/workflows/create-product-update-request'
 import { CreateProductOptionType } from '../../validators'
+
+const MAX_PRODUCT_OPTIONS = 5
 
 /**
  * @oas [post] /vendor/products/{id}/options
@@ -53,6 +58,24 @@ export const POST = async (
 ) => {
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
   const productId = req.params.id
+
+  const {
+    data: [existingProduct]
+  } = await query.graph(
+    {
+      entity: 'product',
+      fields: ['options.id'],
+      filters: { id: productId }
+    },
+    { throwIfKeyNotFound: true }
+  )
+
+  if ((existingProduct.options?.length ?? 0) >= MAX_PRODUCT_OPTIONS) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      `A product can have at most ${MAX_PRODUCT_OPTIONS} options.`
+    )
+  }
 
   await createProductOptionsWorkflow(req.scope).run({
     input: {
