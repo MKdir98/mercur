@@ -1,94 +1,100 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { mercurQuery } from '../../lib/client'
+import { normalizeIranPhone } from '../../lib/normalize-iran-phone'
 
-export type FeatureModule = {
-  id: string
-  module_name: string
-  is_gated: boolean
-}
+const FEATURE_ACCESS_QUERY_KEY = ['feature-access-store']
 
-export type FeatureGrant = {
-  id: string
-  module_name: string
-  phone: string
-  granted_by: string | null
-  expires_at: string | null
-  created_at: string
-}
-
-export const useFeatureModules = () => {
+// Granted phones per module live in the store's `metadata.feature_access`
+// blob (no dedicated table) — same place `price_display_usd` is stored.
+export const useFeatureAccess = () => {
   const { data, isLoading } = useQuery({
-    queryKey: ['feature-modules'],
-    queryFn: () => mercurQuery('/admin/feature-access/modules', { method: 'GET' })
+    queryKey: FEATURE_ACCESS_QUERY_KEY,
+    queryFn: () => mercurQuery('/admin/stores', { method: 'GET' }),
   })
 
+  const store = data?.stores?.[0]
+  const metadata = (store?.metadata ?? {}) as Record<string, unknown>
+  const featureAccess = (metadata.feature_access ?? {}) as Record<string, string[]>
+
   return {
-    featureModules: (data?.feature_modules || []) as FeatureModule[],
-    isLoading
+    storeId: store?.id as string | undefined,
+    metadata,
+    featureAccess,
+    isLoading,
   }
 }
 
-export const useUpsertFeatureModule = () => {
+const saveModulePhones = (
+  storeId: string,
+  metadata: Record<string, unknown>,
+  moduleName: string,
+  phones: string[]
+) => {
+  const featureAccess = {
+    ...((metadata.feature_access ?? {}) as Record<string, string[]>),
+    [moduleName]: phones,
+  }
+  return mercurQuery(`/admin/stores/${storeId}`, {
+    method: 'POST',
+    body: {
+      metadata: {
+        ...metadata,
+        feature_access: featureAccess,
+      },
+    },
+  })
+}
+
+export const useGrantFeatureAccess = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: { module_name: string; is_gated: boolean }) =>
-      mercurQuery('/admin/feature-access/modules', {
-        method: 'POST',
-        body: data
-      }),
+    mutationFn: ({
+      storeId,
+      metadata,
+      module_name,
+      phones,
+      phone,
+    }: {
+      storeId: string
+      metadata: Record<string, unknown>
+      module_name: string
+      phones: string[]
+      phone: string
+    }) => {
+      const normalized = normalizeIranPhone(phone)
+      if (!normalized) {
+        throw new Error('Invalid phone number')
+      }
+      const nextPhones = phones.includes(normalized) ? phones : [...phones, normalized]
+      return saveModulePhones(storeId, metadata, module_name, nextPhones)
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['feature-modules'] })
-    }
+      queryClient.invalidateQueries({ queryKey: FEATURE_ACCESS_QUERY_KEY })
+    },
   })
 }
 
-export const useFeatureGrants = (moduleName: string) => {
-  const { data, isLoading } = useQuery({
-    queryKey: ['feature-grants', moduleName],
-    queryFn: () =>
-      mercurQuery('/admin/feature-access/grants', {
-        method: 'GET',
-        query: { module_name: moduleName, limit: 100 }
-      }),
-    enabled: !!moduleName
-  })
-
-  return {
-    grants: (data?.feature_grants || []) as FeatureGrant[],
-    count: data?.count || 0,
-    isLoading
-  }
-}
-
-export const useCreateFeatureGrant = () => {
+export const useRevokeFeatureAccess = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: { module_name: string; phone: string }) =>
-      mercurQuery('/admin/feature-access/grants', {
-        method: 'POST',
-        body: data
-      }),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ['feature-grants', variables.module_name]
-      })
-    }
-  })
-}
-
-export const useDeleteFeatureGrant = () => {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: ({ id }: { id: string; module_name: string }) =>
-      mercurQuery(`/admin/feature-access/grants/${id}`, { method: 'DELETE' }),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ['feature-grants', variables.module_name]
-      })
-    }
+    mutationFn: ({
+      storeId,
+      metadata,
+      module_name,
+      phones,
+      phone,
+    }: {
+      storeId: string
+      metadata: Record<string, unknown>
+      module_name: string
+      phones: string[]
+      phone: string
+    }) => saveModulePhones(storeId, metadata, module_name, phones.filter((p) => p !== phone)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FEATURE_ACCESS_QUERY_KEY })
+    },
   })
 }

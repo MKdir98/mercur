@@ -32,7 +32,6 @@ module.exports = defineConfig({
   },
   modules: [
     { resolve: '@mercurjs/service-log' },
-    { resolve: './src/modules/feature-access' },
     { resolve: '@mercurjs/seller' },
     { resolve: '@mercurjs/reviews' },
     { resolve: '@mercurjs/marketplace' },

@@ -1,28 +1,34 @@
-import { FEATURE_ACCESS_MODULE } from "../../modules/feature-access"
-import type FeatureAccessModuleService from "../../modules/feature-access/service"
-import { normalizeIranPhone } from "./normalize-phone"
+import { Modules } from "@medusajs/framework/utils"
 
-function isGrantActive(grant: { expires_at: Date | string | null }): boolean {
-  if (!grant.expires_at) {
-    return true
-  }
-  return new Date(grant.expires_at) > new Date()
+import { normalizeIranPhone } from "./normalize-phone"
+import { FEATURE_MODULE_NAMES } from "./modules"
+
+export type FeatureAccessMetadata = Record<string, string[]>
+
+/**
+ * Granted phones per module live in the store's `metadata.feature_access`
+ * blob — no dedicated table. Mirrors how `price_display_usd` is stored on
+ * the same store row (see /store/price-display-config).
+ */
+export async function getFeatureAccessMetadata(
+  container: any
+): Promise<FeatureAccessMetadata> {
+  const storeModule = container.resolve(Modules.STORE)
+  const [store] = await storeModule.listStores()
+  const meta = (store?.metadata ?? {}) as Record<string, unknown>
+  return (meta.feature_access as FeatureAccessMetadata | undefined) ?? {}
 }
 
 /**
- * Named check for a specific module, e.g. from a route that should be hidden
- * entirely until soft-launched. Unconfigured modules (no `feature_module` row)
- * default to open — only modules an admin has explicitly gated are restricted.
+ * Named check for a specific module. Every name in FEATURE_MODULE_NAMES is
+ * gated by definition — a phone only passes if it's in that module's list.
  */
 export async function hasFeatureAccess(
   container: any,
   moduleName: string,
   phone: string | null | undefined
 ): Promise<boolean> {
-  const service: FeatureAccessModuleService = container.resolve(FEATURE_ACCESS_MODULE)
-
-  const [featureModule] = await service.listFeatureModules({ module_name: moduleName })
-  if (!featureModule?.is_gated) {
+  if (!(FEATURE_MODULE_NAMES as readonly string[]).includes(moduleName)) {
     return true
   }
 
@@ -31,18 +37,14 @@ export async function hasFeatureAccess(
     return false
   }
 
-  const grants = await service.listFeatureGrants({
-    module_name: moduleName,
-    phone: normalizedPhone,
-  })
-  return grants.some(isGrantActive)
+  const featureAccess = await getFeatureAccessMetadata(container)
+  return (featureAccess[moduleName] ?? []).includes(normalizedPhone)
 }
 
 /**
  * Filters a list of payment providers (or any `{ id: string }` rows) down to
  * the ones the given phone is allowed to see. A provider is only gated if its
- * id contains the name of a `feature_module` row with `is_gated = true`;
- * providers with no matching module row are left untouched.
+ * id contains one of FEATURE_MODULE_NAMES; anything else is left untouched.
  */
 export async function filterProvidersByFeatureAccess<T extends { id: string }>(
   container: any,
@@ -53,36 +55,26 @@ export async function filterProvidersByFeatureAccess<T extends { id: string }>(
     return providers
   }
 
-  const service: FeatureAccessModuleService = container.resolve(FEATURE_ACCESS_MODULE)
-  const gatedModules = await service.listFeatureModules({ is_gated: true })
-  if (!gatedModules.length) {
+  const gatedNames = FEATURE_MODULE_NAMES.filter((name) =>
+    providers.some((p) => p.id.toLowerCase().includes(name))
+  )
+  if (!gatedNames.length) {
     return providers
   }
 
   const normalizedPhone = normalizeIranPhone(phone)
+  const featureAccess = await getFeatureAccessMetadata(container)
 
-  const results: T[] = []
-  for (const provider of providers) {
+  return providers.filter((provider) => {
     const idLower = provider.id.toLowerCase()
-    const matched = gatedModules.find((m) => idLower.includes(m.module_name.toLowerCase()))
+    const matched = gatedNames.find((name) => idLower.includes(name))
 
     if (!matched) {
-      results.push(provider)
-      continue
+      return true
     }
-
     if (!normalizedPhone) {
-      continue
+      return false
     }
-
-    const grants = await service.listFeatureGrants({
-      module_name: matched.module_name,
-      phone: normalizedPhone,
-    })
-    if (grants.some(isGrantActive)) {
-      results.push(provider)
-    }
-  }
-
-  return results
+    return (featureAccess[matched] ?? []).includes(normalizedPhone)
+  })
 }
