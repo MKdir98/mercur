@@ -41,10 +41,11 @@ export function applyGatewayEnvFilter(
   const iranGatewayAllowlist = parseIranPaymentGatewayKeysFromEnv()
   const filtered = providers.filter((p) => {
     const id = p.id.toLowerCase()
-    const isZarinpal = id.includes("zarinpal")
     const isRemitation = id.includes("remitation")
     if (useRemitation) {
-      return !isZarinpal
+      // Zarinpal stays visible to everyone; Remitation's visibility is
+      // further restricted per-phone downstream (filterProvidersByFeatureAccess).
+      return true
     }
     if (!isRemitation) {
       const iranKey = paymentProviderIdToIranGatewayKey(p.id)
