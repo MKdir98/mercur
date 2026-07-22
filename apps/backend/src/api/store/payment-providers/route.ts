@@ -114,8 +114,8 @@ export async function GET(
       variables: { filters: { id: actorId } },
       fields: ["phone"],
     })
-    const { rows: customerRows } = await remoteQuery(customerQuery)
-    customerPhone = (customerRows?.[0] as { phone?: string })?.phone ?? null
+    const customerRows = (await remoteQuery(customerQuery)) as { phone?: string }[]
+    customerPhone = customerRows?.[0]?.phone ?? null
   }
 
   const featureFiltered = await filterProvidersByFeatureAccess(

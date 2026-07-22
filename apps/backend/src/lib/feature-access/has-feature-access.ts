@@ -1,12 +1,12 @@
 import { Modules } from "@medusajs/framework/utils"
 
 import { normalizeIranPhone } from "./normalize-phone"
-import { FEATURE_MODULE_NAMES } from "./modules"
+import { FEATURE_MODULE_NAMES, FEATURE_MODULE_PROVIDER_IDS } from "./modules"
 
 export type FeatureAccessMetadata = Record<string, string[]>
 
 /**
- * Granted phones per module live in the store's `metadata.feature_access`
+ * Granted phones per feature live in the store's `metadata.feature_access`
  * blob — no dedicated table. Mirrors how `price_display_usd` is stored on
  * the same store row (see /store/price-display-config).
  */
@@ -20,8 +20,8 @@ export async function getFeatureAccessMetadata(
 }
 
 /**
- * Named check for a specific module. Every name in FEATURE_MODULE_NAMES is
- * gated by definition — a phone only passes if it's in that module's list.
+ * Named check for a specific feature. Every name in FEATURE_MODULE_NAMES is
+ * gated by definition — a phone only passes if it's in that feature's list.
  */
 export async function hasFeatureAccess(
   container: any,
@@ -42,9 +42,10 @@ export async function hasFeatureAccess(
 }
 
 /**
- * Filters a list of payment providers (or any `{ id: string }` rows) down to
- * the ones the given phone is allowed to see. A provider is only gated if its
- * id contains one of FEATURE_MODULE_NAMES; anything else is left untouched.
+ * Filters a list of payment providers down to what the given phone is
+ * allowed to see. Each gated feature explicitly maps to the one provider id
+ * it adds (FEATURE_MODULE_PROVIDER_IDS) — providers not tied to any feature
+ * are never touched here.
  */
 export async function filterProvidersByFeatureAccess<T extends { id: string }>(
   container: any,
@@ -55,26 +56,16 @@ export async function filterProvidersByFeatureAccess<T extends { id: string }>(
     return providers
   }
 
-  const gatedNames = FEATURE_MODULE_NAMES.filter((name) =>
-    providers.some((p) => p.id.toLowerCase().includes(name))
-  )
-  if (!gatedNames.length) {
-    return providers
-  }
-
   const normalizedPhone = normalizeIranPhone(phone)
   const featureAccess = await getFeatureAccessMetadata(container)
 
-  return providers.filter((provider) => {
-    const idLower = provider.id.toLowerCase()
-    const matched = gatedNames.find((name) => idLower.includes(name))
+  const blockedProviderIds = new Set<string>(
+    FEATURE_MODULE_NAMES.filter((name) => {
+      const grantedPhones = featureAccess[name] ?? []
+      const hasAccess = !!normalizedPhone && grantedPhones.includes(normalizedPhone)
+      return !hasAccess
+    }).map((name) => FEATURE_MODULE_PROVIDER_IDS[name])
+  )
 
-    if (!matched) {
-      return true
-    }
-    if (!normalizedPhone) {
-      return false
-    }
-    return (featureAccess[matched] ?? []).includes(normalizedPhone)
-  })
+  return providers.filter((provider) => !blockedProviderIds.has(provider.id))
 }
