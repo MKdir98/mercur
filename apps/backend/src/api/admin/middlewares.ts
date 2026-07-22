@@ -7,6 +7,7 @@ import { attributeMiddlewares } from './attributes/middlewares'
 import { citiesMiddlewares } from './cities/middlewares'
 import { commissionMiddlewares } from './commission/middlewares'
 import { configurationMiddleware } from './configuration/middlewares'
+import { featureAccessMiddlewares } from './feature-access/middlewares'
 import { homepageMediaMiddleware } from './homepage-media/middlewares'
 import { translationsMiddleware } from './translations/middlewares'
 import { orderSetsMiddlewares } from './order-sets/middlewares'
@@ -23,6 +24,7 @@ export const adminMiddlewares: MiddlewareRoute[] = [
   ...orderSetsMiddlewares,
   ...requestsMiddlewares,
   ...configurationMiddleware,
+  ...featureAccessMiddlewares,
   ...homepageMediaMiddleware,
   ...translationsMiddleware,
   ...returnRequestsMiddlewares,

@@ -3,6 +3,7 @@ import { defineConfig, loadEnv } from '@medusajs/framework/utils'
 import { IRAN_BANKTEST_SEP_CREDENTIALS } from '@mercurjs/framework'
 
 import {
+  effectiveRemitationSandbox,
   effectiveSepSandbox,
   effectiveZarinpalSandbox
 } from './src/lib/iran-payment-sandbox'
@@ -31,6 +32,7 @@ module.exports = defineConfig({
   },
   modules: [
     { resolve: '@mercurjs/service-log' },
+    { resolve: './src/modules/feature-access' },
     { resolve: '@mercurjs/seller' },
     { resolve: '@mercurjs/reviews' },
     { resolve: '@mercurjs/marketplace' },
@@ -143,6 +145,23 @@ module.exports = defineConfig({
             options: {
               merchantId: process.env.ZARINPAL_MERCHANT_ID,
               sandbox: effectiveZarinpalSandbox()
+            }
+          },
+          {
+            resolve: '@mercurjs/payment-remitation',
+            id: 'remitation',
+            options: {
+              accessKey: process.env.REMITATION_ACCESS_KEY,
+              secretKey: process.env.REMITATION_SECRET_KEY,
+              baseUrl:
+                process.env.REMITATION_API_BASE_URL ||
+                'https://api.merchant.remitation.com/api',
+              provider: process.env.REMITATION_PAYMENT_PROVIDER || 'stripe',
+              currency: process.env.REMITATION_PAYMENT_CURRENCY || 'USD',
+              rialPerUsd: process.env.REMITATION_RIAL_PER_USD
+                ? Number(process.env.REMITATION_RIAL_PER_USD)
+                : undefined,
+              sandbox: effectiveRemitationSandbox()
             }
           }
         ]

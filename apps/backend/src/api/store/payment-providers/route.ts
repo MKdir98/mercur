@@ -5,6 +5,7 @@ import {
   remoteQueryObjectFromString,
 } from "@medusajs/framework/utils"
 import { applyGatewayEnvFilter } from "../../../lib/payment-providers/apply-gateway-filter"
+import { filterProvidersByFeatureAccess } from "../../../lib/feature-access/has-feature-access"
 
 function shouldLogPaymentRegion(): boolean {
   return (
@@ -105,8 +106,26 @@ export async function GET(
       process.env.STORE_LOCKED_REGION_ID?.trim() ?? null,
   })
 
+  const actorId = (req as any).auth_context?.actor_id as string | undefined
+  let customerPhone: string | null = null
+  if (actorId) {
+    const customerQuery = remoteQueryObjectFromString({
+      entryPoint: "customer",
+      variables: { filters: { id: actorId } },
+      fields: ["phone"],
+    })
+    const { rows: customerRows } = await remoteQuery(customerQuery)
+    customerPhone = (customerRows?.[0] as { phone?: string })?.phone ?? null
+  }
+
+  const featureFiltered = await filterProvidersByFeatureAccess(
+    req.scope,
+    filtered,
+    customerPhone
+  )
+
   res.json({
-    payment_providers: filtered,
+    payment_providers: featureFiltered,
     count: metadata.count,
     offset: metadata.skip,
     limit: metadata.take,
