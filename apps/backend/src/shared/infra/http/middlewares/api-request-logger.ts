@@ -83,6 +83,16 @@ export function apiRequestLogger(
       customer_id: auth?.actor_type === 'customer' ? auth.actor_id : undefined,
       seller_id: auth?.actor_type === 'seller' ? auth.actor_id : undefined
     })
+
+    if (res.statusCode >= 500) {
+      kibanaLogger.error(`${req.method} ${path} responded ${res.statusCode}`, {
+        service: resolveApiType(path),
+        metadata: {
+          duration_ms: duration,
+          response_body: capturedResponseBody
+        }
+      })
+    }
   })
 
   next()

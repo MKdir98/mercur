@@ -8,6 +8,7 @@ import { StepResponse, createStep } from '@medusajs/framework/workflows-sdk'
 import { CreateSellerInvitationDTO } from '@mercurjs/framework'
 import { ResendNotificationTemplates } from '@mercurjs/resend'
 
+import { kibanaLogger } from '../../../infrastructure/kibana-logger'
 import { Hosts, buildHostAddress } from '../../../shared/infra/http/utils/hosts'
 
 export const sendSellerInvitationEmailStep = createStep(
@@ -34,6 +35,10 @@ export const sendSellerInvitationEmailStep = createStep(
       return new StepResponse(notification)
     } catch (e) {
       logger.error(e)
+      kibanaLogger.error(e instanceof Error ? e.message : String(e), {
+        service: 'send-seller-invitation-email',
+        error: e instanceof Error ? { message: e.message, stack: e.stack } : undefined
+      })
       throw new MedusaError(
         MedusaError.Types.UNEXPECTED_STATE,
         'Notification provider failed!'

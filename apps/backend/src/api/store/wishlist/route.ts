@@ -8,6 +8,7 @@ import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 import { calculateWishlistProductsPrice } from '@mercurjs/wishlist'
 import { TRANSLATIONS_MODULE, TranslationsModuleService } from '@mercurjs/translations'
 
+import { kibanaLogger } from '../../../infrastructure/kibana-logger'
 import { applyTranslations, shouldTranslate } from '../../../shared/utils/apply-translations'
 import customerWishlist from '../../../links/customer-wishlist'
 import { createWishlistEntryWorkflow } from '../../../workflows/wishlist/workflows'
@@ -78,6 +79,9 @@ export const POST = async (
     logger.warn('[WishlistPOST] 401 Unauthorized - no customerId', {
       authContext: req.auth_context,
       hasAuthHeader: !!req.headers.authorization
+    })
+    kibanaLogger.warn('[WishlistPOST] 401 Unauthorized - no customerId', {
+      service: 'store-wishlist'
     })
     res.status(401).json({ message: 'Unauthorized' })
     return

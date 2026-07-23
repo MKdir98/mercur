@@ -4,6 +4,7 @@ import {
 } from '@medusajs/framework'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 
+import { kibanaLogger } from '../../../../infrastructure/kibana-logger'
 import orderSplitOrderPayment from '../../../../links/order-split-order-payment'
 import { listOrderCommissionLinesWorkflow } from '../../../../workflows/commission/workflows'
 import { getLastFulfillmentStatus } from '../../../../workflows/order/utils/aggregate-status'
@@ -145,6 +146,10 @@ export const GET = async (
 
   if (!order) {
     logger.warn(`[VendorGetOrder] Order ${id} not found`)
+    kibanaLogger.warn(`[VendorGetOrder] Order ${id} not found`, {
+      service: 'vendor-orders',
+      metadata: { orderId: id }
+    })
     return res.status(404).json({
       message: `Order with id ${id} not found`
     })

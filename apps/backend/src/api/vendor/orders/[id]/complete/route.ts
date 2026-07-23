@@ -5,6 +5,7 @@ import {
 import { completeOrderWorkflow } from '@medusajs/medusa/core-flows'
 import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 
+import { kibanaLogger } from '../../../../../infrastructure/kibana-logger'
 import { getVendorOrdersListWorkflow } from '../../../../../workflows/order/workflows'
 
 const ORDER_ITEMS_FIELDS = [
@@ -88,6 +89,10 @@ export const POST = async (
     const logger = req.scope.resolve('logger')
     logger.warn(
       `[VendorCompleteOrder] Rejected: order ${id} has unfulfilled items, orderId=${id}, itemsCount=${(orderData.items as unknown[]).length}`
+    )
+    kibanaLogger.warn(
+      `[VendorCompleteOrder] Rejected: order ${id} has unfulfilled items`,
+      { service: 'vendor-orders', metadata: { orderId: id } }
     )
     return res.status(400).json({
       message:

@@ -290,7 +290,7 @@ export async function ensureKibanaIndexTemplates(): Promise<void> {
 // deletes whole indices, and there's only one, so it would eventually delete
 // everything at once rather than just the old documents. Deleting old
 // documents by query is the safe equivalent for a single growing index.
-export async function pruneOldLogs(retentionDays = 4): Promise<void> {
+export async function pruneOldLogs(retentionDays = 2): Promise<void> {
   const client = getKibanaClient()
   const cutoff = `now-${retentionDays}d/d`
 
