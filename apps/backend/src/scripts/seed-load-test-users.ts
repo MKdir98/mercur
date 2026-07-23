@@ -1,13 +1,19 @@
 /**
- * Seed 50 test customers for load testing.
+ * Seed test customers for load testing.
  * Run: npx medusa exec src/scripts/seed-load-test-users.ts
  *
- * Each user gets:
- *   email: loadtest_001@doorfestival.test ... loadtest_050@doorfestival.test
- *   password: LoadTest@123
- *   phone: +989000000001 ... +989000000050
+ * Configurable via env vars:
+ *   LOAD_TEST_USER_COUNT=50   number of users to seed (default 50)
+ *   LOAD_TEST_PASSWORD=...    password for all seeded users (default LoadTest@123)
+ *   LOAD_TEST_OUTPUT_FILE=... where to write the credentials JSON (default /tmp/load-test-users.json)
  *
- * Outputs /tmp/load-test-users.json for k6 scripts to consume.
+ * Example: LOAD_TEST_USER_COUNT=20 npx medusa exec src/scripts/seed-load-test-users.ts
+ *
+ * Each user gets:
+ *   email: loadtest_001@doorfestival.test ... loadtest_0NN@doorfestival.test
+ *   phone: +989000000001 ... +989000000NN
+ *
+ * Outputs a JSON credentials file for k6 scripts to consume.
  *
  * Re-running this script never creates duplicate customers: existing
  * loadtest_* customers are reused and have their password re-enabled
@@ -20,9 +26,9 @@ import * as fs from 'fs'
 import { ExecArgs } from '@medusajs/framework/types'
 import { Modules } from '@medusajs/framework/utils'
 
-const USER_COUNT = 50
-const PASSWORD = 'LoadTest@123'
-const OUTPUT_FILE = '/tmp/load-test-users.json'
+const USER_COUNT = Number(process.env.LOAD_TEST_USER_COUNT || 50)
+const PASSWORD = process.env.LOAD_TEST_PASSWORD || 'LoadTest@123'
+const OUTPUT_FILE = process.env.LOAD_TEST_OUTPUT_FILE || '/tmp/load-test-users.json'
 
 export default async function seedLoadTestUsers({ container }: ExecArgs) {
   const customerModule = container.resolve(Modules.CUSTOMER)
