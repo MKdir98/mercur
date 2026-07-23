@@ -314,9 +314,127 @@ export async function POST(
         throw createError
       }
     } else {
-      res.status(400).json({
-        success: false,
-        message: "برای ورود از endpoint /store/auth/login استفاده کنید",
+      if (channel === "email") {
+        const verifiedEmail = email?.trim().toLowerCase()
+        if (!verifiedEmail) {
+          res.status(400).json({
+            success: false,
+            message: "ایمیل الزامی است",
+          })
+          return
+        }
+
+        const subjectKey = otpSubjectKey("email", verifiedEmail)
+        if (
+          !verificationToken ||
+          !consumeVerificationToken(verificationToken, subjectKey)
+        ) {
+          res.status(403).json({
+            success: false,
+            message:
+              "تایید ایمیل منقضی شده است. لطفاً دوباره کد تایید دریافت کنید",
+          })
+          return
+        }
+
+        const { data: customers } = await query.graph({
+          entity: "customer",
+          fields: ["id", "email", "first_name", "last_name", "phone"],
+          filters: { email: verifiedEmail },
+        })
+        const customer = customers && customers.length > 0 ? customers[0] : null
+
+        if (!customer) {
+          res.status(404).json({
+            success: false,
+            message: "حساب کاربری با این ایمیل یافت نشد. لطفاً ثبت‌نام کنید",
+          })
+          return
+        }
+
+        if (req.session) {
+          req.session.auth_context = {
+            actor_id: customer.id,
+            actor_type: "customer",
+          }
+          req.session.customer_id = customer.id
+        }
+
+        const token = signCustomerToken(customer.id)
+
+        res.json({
+          success: true,
+          message: "ورود موفقیت‌آمیز",
+          token,
+          customer: {
+            id: customer.id,
+            first_name: customer.first_name,
+            last_name: customer.last_name,
+            phone: customer.phone,
+            email: customer.email,
+          },
+        })
+        return
+      }
+
+      if (!phone) {
+        res.status(400).json({
+          success: false,
+          message: "شماره تلفن الزامی است",
+        })
+        return
+      }
+
+      const normalizedPhone = otpSubjectKey("phone", phone)
+
+      if (
+        !verificationToken ||
+        !consumeVerificationToken(verificationToken, normalizedPhone)
+      ) {
+        res.status(403).json({
+          success: false,
+          message:
+            "تایید شماره تلفن منقضی شده است. لطفاً دوباره کد تایید دریافت کنید",
+        })
+        return
+      }
+
+      const { data: customers } = await query.graph({
+        entity: "customer",
+        fields: ["id", "email", "first_name", "last_name", "phone"],
+        filters: { phone: normalizedPhone },
+      })
+      const customer = customers && customers.length > 0 ? customers[0] : null
+
+      if (!customer) {
+        res.status(404).json({
+          success: false,
+          message: "حساب کاربری با این شماره یافت نشد. لطفاً ابتدا ثبت‌نام کنید",
+        })
+        return
+      }
+
+      if (req.session) {
+        req.session.auth_context = {
+          actor_id: customer.id,
+          actor_type: "customer",
+        }
+        req.session.customer_id = customer.id
+      }
+
+      const token = signCustomerToken(customer.id)
+
+      res.json({
+        success: true,
+        message: "ورود موفقیت‌آمیز",
+        token,
+        customer: {
+          id: customer.id,
+          first_name: customer.first_name,
+          last_name: customer.last_name,
+          phone: customer.phone,
+          email: customer.email,
+        },
       })
     }
   } catch (error) {
